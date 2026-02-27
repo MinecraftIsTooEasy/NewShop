@@ -7,3 +7,11 @@ The system shop provides some default items, and you can also add your own. With
 The trading post provides player-to-player trading functionality. Players can place buy/sell orders here. You can open the listing page by pressing ALT + right-clicking in your inventory/container interface. In OP and Creative modes, you can also directly list items from interfaces such as the EMI or Creative mode inventory for easy resource distribution. Furthermore, by locating the configuration file `newshop.json` (server configuration) and enabling the global announcement, the entire server will be notified of what items have been listed. Each player has a default list size of 5 (configurable). Currently, the purchase system only allows listing orders via the command `/gs b`, which has detailed instructions.
 
 The mailbox is used to store purchase orders, in case you are offline and unable to receive them.
+
+# 【New Shop】 v1.0.1
+
+* Fixed some bugs
+
+* Fixed to support all variant items, such as different colors of wool
+
+* Now supports adding items with NBT data to the system shop, such as enchanted tools.
