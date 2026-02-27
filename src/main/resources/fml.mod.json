@@ -5,6 +5,7 @@
   "depends": {
     "fishmodloader": ">=3.3.2",
     "rusted_iron_core": ">=1.5.0",
+    "many-lib": ">=2.3.0",
     "emi": ">=1.1.20",
     "pinin": ">=1.6.0"
   },

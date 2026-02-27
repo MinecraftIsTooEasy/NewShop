@@ -8,3 +8,4 @@ accessible field net/minecraft/ServerPlayer currentWindowId I
 accessible field net/minecraft/InventoryBasic inventoryContents [Lnet/minecraft/ItemStack;
 accessible field net/minecraft/Item maxStackSize I
 accessible method net/minecraft/SaveHandler getWorldDirectory ()Ljava/io/File;
+accessible field net/minecraft/Slot slotIndex I

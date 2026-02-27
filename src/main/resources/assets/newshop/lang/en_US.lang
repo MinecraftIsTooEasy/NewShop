@@ -58,6 +58,7 @@ gshop.listing.add.fail_stack=§cNot enough items in hand
 gshop.listing.add.title=Create Listing: %s
 gshop.listing.add.price=Sell Price (per unit):
 gshop.listing.add.amount=Amount to list:
+gshop.listing.add.amount.creative=Amount to list (Creative) :
 gshop.listing.remove.success=§aUnlisted %s x %s (ID:%s) returned
 gshop.listing.remove.not_owner=§cYou are not the owner of %s
 gshop.listing.remove.not_found=§cListing %s not found

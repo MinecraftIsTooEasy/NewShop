@@ -58,6 +58,7 @@ gshop.listing.add.fail_stack=§c手中物品数量不足
 gshop.listing.add.title=创建上架： %s
 gshop.listing.add.price=出售单价:
 gshop.listing.add.amount=上架数量:
+gshop.listing.add.amount.creative=上架数量 (创造):
 gshop.listing.remove.success=§a已下架 %s x %s (ID:%s) 并返还
 gshop.listing.remove.not_owner=§c你不是 %s 的所有者
 gshop.listing.remove.not_found=§c上架 %s 不存在
@@ -93,10 +94,10 @@ config.name.shop.forceSellUnlisted=强制回收未设置价格的物品
 config.comment.shop.forceSellUnlisted=是否允许强制回收未设置价格的物品（true为允许，false为禁止）
 
 config.name.shop.skyblockMode=空岛模式
-config.comment.shop.skyblockMode=是否开启空岛模式（开启后刷怪蛋等空岛专属物品将会加入到商店中）
+config.comment.shop.skyblockMode=是否开启空岛模式 (开启后刷怪蛋等空岛专属物品将会加入到商店中)
 
-config.name.shop.announceGlobalListing=全服公告全球商店上架
-config.comment.shop.announceGlobalListing=是否在全球商店有新上架时向全服广播消息
+config.name.shop.announceGlobalListing=全服公告交易行上架
+config.comment.shop.announceGlobalListing=是否在交易行有新上架时向全服广播消息
 
 config.name.shop.maxGlobalListings=玩家最大上架数量
-config.comment.shop.maxGlobalListings=每位玩家在全球商店可同时上架的最大出售条目数量，默认5
+config.comment.shop.maxGlobalListings=每位玩家在交易行可同时上架的最大出售条目数量，默认5

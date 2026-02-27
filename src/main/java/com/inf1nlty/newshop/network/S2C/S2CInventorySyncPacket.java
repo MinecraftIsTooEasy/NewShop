@@ -74,7 +74,7 @@ public class S2CInventorySyncPacket implements Packet {
             {
                 buf.writeShort((short) st.itemID);
                 buf.writeByte(st.stackSize);
-                buf.writeShort((short) st.getItemDamage());
+                buf.writeShort((short) st.getItemSubtype());
                 buf.writeBoolean(st.stackTagCompound != null);
 
                 if (st.stackTagCompound != null)

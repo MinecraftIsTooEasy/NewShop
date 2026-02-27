@@ -61,7 +61,10 @@ public class GlobalShopCommand extends CommandBase {
         }
         if (desired <= 0 || desired > hand.stackSize) { ShopS2C.sendResult(player, "gshop.listing.add.fail_stack"); return; }
 
-        GlobalListing listing = GlobalShopData.addSellOrder(player, hand.itemID, hand.getItemDamage(), desired, priceTenths);
+        // Check cap BEFORE deducting items to prevent item loss on failure
+        GlobalListing listing = GlobalShopData.addSellOrder(player, hand.itemID, hand.getItemSubtype(), desired, priceTenths, hand);
+        if (listing == null) { ShopS2C.sendResult(player, "gshop.listing.add.fail_cap"); return; }
+
         hand.stackSize -= desired;
         if (hand.stackSize <= 0) player.inventory.mainInventory[player.inventory.currentItem] = null;
 
@@ -72,6 +75,8 @@ public class GlobalShopCommand extends CommandBase {
                 "gshop.listing.announce.line2|price=" + Money.format(listing.priceTenths) + "|type=Sell"
             );
         }
+        ShopS2C.broadcastGlobalSnapshot();
+        ShopS2C.syncInventory(player);
     }
 
     private void handleBuyOrder(ServerPlayer player, String[] args)

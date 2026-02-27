@@ -6,6 +6,8 @@ import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
 
+import java.io.ByteArrayOutputStream;
+
 /**
  * GUI to create a global marketplace listing from the player's inventory.
  * Opened by Alt+Right-Click on an inventory slot. Allows the player to set
@@ -21,6 +23,8 @@ public class GuiCreateListing extends GuiScreen {
     /** windowId of the open container; -1 if coming from player inventory. */
     private final int windowId;
     private final boolean fromContainer;
+    /** True when the player is in creative/OP mode — no inventory check on server. */
+    private final boolean creative;
 
     private GuiTextField priceField;
     private GuiTextField amountField;
@@ -29,16 +33,22 @@ public class GuiCreateListing extends GuiScreen {
 
     /** Player inventory slot constructor (backward compatible). */
     public GuiCreateListing(GuiScreen parent, ItemStack editStack, int slotIndex) {
-        this(parent, editStack, slotIndex, -1, false);
+        this(parent, editStack, slotIndex, -1, false, false);
     }
 
     /** Full constructor for both player-inventory and external-container slots. */
     public GuiCreateListing(GuiScreen parent, ItemStack editStack, int slotIndex, int windowId, boolean fromContainer) {
-        this.parentScreen = parent;
-        this.editStack = editStack;
-        this.slotIndex = slotIndex;
-        this.windowId = windowId;
+        this(parent, editStack, slotIndex, windowId, fromContainer, false);
+    }
+
+    /** Full constructor including creative/OP bypass flag. */
+    public GuiCreateListing(GuiScreen parent, ItemStack editStack, int slotIndex, int windowId, boolean fromContainer, boolean creative) {
+        this.parentScreen  = parent;
+        this.editStack     = editStack;
+        this.slotIndex     = slotIndex;
+        this.windowId      = windowId;
         this.fromContainer = fromContainer;
+        this.creative      = creative;
     }
 
     @Override
@@ -59,10 +69,10 @@ public class GuiCreateListing extends GuiScreen {
         priceField.setMaxStringLength(16);
         priceField.setText("0.");
 
-        // Amount field (default to held stack size)
+        // Amount field — creative/OP can list any positive amount freely
         amountField = new GuiTextField(fontRenderer, centerX - 100, sellY, 200, 20);
         amountField.setMaxStringLength(8);
-        amountField.setText(String.valueOf(editStack.stackSize));
+        amountField.setText(creative ? "1" : String.valueOf(editStack.stackSize));
 
         updateButtons();
     }
@@ -90,18 +100,30 @@ public class GuiCreateListing extends GuiScreen {
                 amount = -1;
             }
             if (priceTenths <= 0) {
-                // invalid price -> do nothing client-side; server will validate too
                 return;
             }
-            if (amount <= 0 || amount > editStack.stackSize) {
+            if (amount <= 0) {
+                return;
+            }
+            // Non-creative players cannot list more than they hold
+            if (!creative && amount > editStack.stackSize) {
                 return;
             }
 
             // Use dedicated packet to list from slot so server will deduct items from that slot
             if (fromContainer) {
-                ShopC2S.sendGlobalListFromContainerSlot(editStack.itemID, editStack.getItemDamage(), amount, this.slotIndex, priceTenths, this.windowId);
+                ShopC2S.sendGlobalListFromContainerSlot(editStack.itemID, editStack.getItemDamage(), amount, this.slotIndex, priceTenths, this.windowId, creative);
             } else {
-                ShopC2S.sendGlobalListFromSlot(editStack.itemID, editStack.getItemDamage(), amount, this.slotIndex, priceTenths);
+                // For creative/template listings (slotIndex == -1), compress the item's full NBT
+                byte[] nbtData = null;
+                if (creative && editStack.stackTagCompound != null) {
+                    try {
+                        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                        CompressedStreamTools.writeCompressed(editStack.stackTagCompound, bos);
+                        nbtData = bos.toByteArray();
+                    } catch (Exception ignored) {}
+                }
+                ShopC2S.sendGlobalListFromSlot(editStack.itemID, editStack.getItemDamage(), amount, this.slotIndex, priceTenths, creative, nbtData);
             }
             mc.displayGuiScreen(parentScreen);
         }
@@ -133,7 +155,8 @@ public class GuiCreateListing extends GuiScreen {
         drawCenteredString(fontRenderer, title, width / 2, 15, 0xFFFFFF);
 
         drawString(fontRenderer, I18n.getString("gshop.listing.add.price"), width / 2 - 100, height / 2 - 30, 0x404040);
-        drawString(fontRenderer, I18n.getString("gshop.listing.add.amount"), width / 2 - 100, height / 2 + 10, 0x404040);
+        String amountKey = creative ? "gshop.listing.add.amount.creative" : "gshop.listing.add.amount";
+        drawString(fontRenderer, I18n.getString(amountKey), width / 2 - 100, height / 2 + 10, creative ? 0x55AAFF : 0x404040);
 
         priceField.drawTextBox();
         amountField.drawTextBox();

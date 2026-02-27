@@ -3,14 +3,15 @@ package com.inf1nlty.newshop.network.C2S;
 import com.inf1nlty.newshop.network.ShopS2C;
 import moddedmite.rustedironcore.network.Packet;
 import moddedmite.rustedironcore.network.PacketByteBuf;
-import net.minecraft.EntityPlayer;
-import net.minecraft.ResourceLocation;
-import net.minecraft.ServerPlayer;
+import net.minecraft.*;
+
+import java.io.ByteArrayInputStream;
 
 /**
  * Lists a global sell order from a specific inventory or container slot.
  * fromContainer=false uses player.inventory.mainInventory[slotIndex];
  * fromContainer=true uses player.openContainer.getSlot(slotIndex), validated by windowId.
+ * When creative=true and slotIndex=-1, nbtData carries the full item NBT template.
  */
 public class C2SListFromSlotPacket implements Packet {
 
@@ -23,6 +24,9 @@ public class C2SListFromSlotPacket implements Packet {
     private final int     priceTenths;
     private final int     windowId;
     private final boolean fromContainer;
+    private final boolean creative;
+    /** Compressed item NBT for creative template listings (slotIndex == -1). May be null. */
+    private final byte[]  nbtData;
 
     public C2SListFromSlotPacket(PacketByteBuf buf)
     {
@@ -33,14 +37,28 @@ public class C2SListFromSlotPacket implements Packet {
         this.priceTenths   = buf.readInt();
         this.windowId      = buf.readInt();
         this.fromContainer = buf.readBoolean();
+        this.creative      = buf.readBoolean();
+        boolean hasNbt     = buf.readBoolean();
+        if (hasNbt) {
+            int len = buf.readUnsignedShort();
+            this.nbtData = new byte[len];
+            buf.readFully(this.nbtData);
+        } else {
+            this.nbtData = null;
+        }
     }
 
     public C2SListFromSlotPacket(int itemId, int meta, int amount, int slotIndex, int priceTenths)
     {
-        this(itemId, meta, amount, slotIndex, priceTenths, -1, false);
+        this(itemId, meta, amount, slotIndex, priceTenths, -1, false, false, null);
     }
 
-    public C2SListFromSlotPacket(int itemId, int meta, int amount, int slotIndex, int priceTenths, int windowId, boolean fromContainer)
+    public C2SListFromSlotPacket(int itemId, int meta, int amount, int slotIndex, int priceTenths, int windowId, boolean fromContainer, boolean creative)
+    {
+        this(itemId, meta, amount, slotIndex, priceTenths, windowId, fromContainer, creative, null);
+    }
+
+    public C2SListFromSlotPacket(int itemId, int meta, int amount, int slotIndex, int priceTenths, int windowId, boolean fromContainer, boolean creative, byte[] nbtData)
     {
         this.itemId        = itemId;
         this.meta          = meta;
@@ -49,6 +67,8 @@ public class C2SListFromSlotPacket implements Packet {
         this.priceTenths   = priceTenths;
         this.windowId      = windowId;
         this.fromContainer = fromContainer;
+        this.creative      = creative;
+        this.nbtData       = nbtData;
     }
 
     @Override
@@ -61,6 +81,14 @@ public class C2SListFromSlotPacket implements Packet {
         buf.writeInt(priceTenths);
         buf.writeInt(windowId);
         buf.writeBoolean(fromContainer);
+        buf.writeBoolean(creative);
+        if (nbtData != null && nbtData.length > 0) {
+            buf.writeBoolean(true);
+            buf.writeShort(nbtData.length);
+            buf.write(nbtData, 0, nbtData.length);
+        } else {
+            buf.writeBoolean(false);
+        }
     }
 
     @Override
@@ -68,10 +96,17 @@ public class C2SListFromSlotPacket implements Packet {
     {
         if (!(player instanceof ServerPlayer serverPlayer)) return;
 
+        // Decompress template NBT if present
+        NBTTagCompound templateNbt = null;
+        if (nbtData != null && nbtData.length > 0) {
+            try { templateNbt = CompressedStreamTools.readCompressed(new ByteArrayInputStream(nbtData)); }
+            catch (Exception ignored) {}
+        }
+
         if (fromContainer)
-            ShopS2C.listGlobalFromContainerSlot(serverPlayer, itemId, meta, amount, priceTenths, windowId, slotIndex);
+            ShopS2C.listGlobalFromContainerSlot(serverPlayer, itemId, meta, amount, priceTenths, windowId, slotIndex, creative);
         else
-            ShopS2C.listGlobalFromSlot(serverPlayer, itemId, meta, amount, priceTenths, slotIndex);
+            ShopS2C.listGlobalFromSlot(serverPlayer, itemId, meta, amount, priceTenths, slotIndex, creative, templateNbt);
     }
 
     @Override

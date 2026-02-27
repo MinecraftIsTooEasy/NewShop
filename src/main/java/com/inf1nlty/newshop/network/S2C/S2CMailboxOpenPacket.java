@@ -61,7 +61,7 @@ public class S2CMailboxOpenPacket implements Packet {
             } else {
                 buf.writeShort((short) stack.itemID);
                 buf.writeByte(stack.stackSize);
-                buf.writeShort((short) stack.getItemDamage());
+                buf.writeShort((short) stack.getItemSubtype());
                 buf.writeBoolean(stack.stackTagCompound != null);
                 if (stack.stackTagCompound != null) {
                     byte[] nbt = compressNBT(stack.stackTagCompound);

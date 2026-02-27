@@ -54,14 +54,21 @@ public final class ShopPluginLoader {
         @Override
         public void addItem(Item item, int meta, double buyPrice, double sellPrice)
         {
-            if (item == null) return;
+            addItemStack(new ItemStack(item, 1, meta), buyPrice, sellPrice);
+        }
+
+        @Override
+        public void addItemStack(ItemStack source, double buyPrice, double sellPrice)
+        {
+            if (source == null || source.getItem() == null) return;
+            Item item = source.getItem();
+            int meta = source.getItemSubtype();
 
             int ckey       = GoodsConfig.compositeKey(item.itemID, meta);
             int buyTenths  = toTenths(buyPrice);
             int sellTenths = toTenths(sellPrice);
 
             if (itemMap.containsKey(ckey)) return;
-
             if (buyTenths == 0 && sellTenths == 0) return;
 
             ShopListing shopItem     = new ShopListing();
@@ -69,7 +76,9 @@ public final class ShopPluginLoader {
             shopItem.damage          = meta;
             shopItem.buyPriceTenths  = buyTenths;
             shopItem.sellPriceTenths = sellTenths;
-            shopItem.itemStack       = new ItemStack(item, 1, meta);
+            // Preserve the source stack (including NBT) so NBT-subtype items display and deliver correctly
+            shopItem.itemStack       = source.copy();
+            shopItem.itemStack.stackSize = 1;
             shopItem.displayName     = shopItem.itemStack.getDisplayName();
             itemList.add(shopItem);
             itemMap.put(ckey, shopItem);

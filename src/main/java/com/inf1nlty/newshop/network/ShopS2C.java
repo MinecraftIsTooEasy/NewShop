@@ -58,10 +58,13 @@ public class ShopS2C
         for (ShopListing shopItem : items)
         {
             SystemShopClientCatalog.Entry entry = new SystemShopClientCatalog.Entry();
-            entry.itemID    = shopItem.itemID;
-            entry.meta      = shopItem.damage;
+            entry.itemID     = shopItem.itemID;
+            entry.meta       = shopItem.damage;
             entry.buyTenths  = shopItem.buyPriceTenths;
             entry.sellTenths = shopItem.sellPriceTenths;
+            // Send item NBT so NBT-subtype variants display correctly on the client
+            if (shopItem.itemStack != null && shopItem.itemStack.stackTagCompound != null)
+                entry.nbtCompressed = compressNBT(shopItem.itemStack.stackTagCompound);
             entries.add(entry);
         }
 
@@ -69,18 +72,30 @@ public class ShopS2C
         syncInventory(player);
     }
 
-    public static void buySystem(ServerPlayer player, int itemID, int meta, int count)
+    public static void buySystem(ServerPlayer player, int itemID, int meta, int count, byte[] nbtData)
     {
         if (count <= 0) count = 1;
 
-        ShopListing shopItem = GoodsConfig.get(itemID, meta);
+        NBTTagCompound nbt = null;
+        if (nbtData != null && nbtData.length > 0) {
+            try { nbt = CompressedStreamTools.readCompressed(new java.io.ByteArrayInputStream(nbtData)); }
+            catch (Exception ignored) {}
+        }
+
+        Item probeItem = (itemID >= 0 && itemID < Item.itemsList.length) ? Item.itemsList[itemID] : null;
+        if (probeItem == null) { sendResult(player, "shop.item_not_supported"); return; }
+        ItemStack probe = new ItemStack(probeItem, 1, meta);
+        if (nbt != null) probe.stackTagCompound = nbt;
+
+        ShopListing shopItem = GoodsConfig.get(probe);
         if (shopItem == null) { sendResult(player, "shop.item_not_supported"); return; }
 
         int cost = shopItem.buyPriceTenths * count;
         if (cost <= 0) { sendResult(player, "shop.item_not_supported"); return; }
         if (MoneyManager.getBalanceTenths(player) < cost) { sendResult(player, "shop.not_enough_money"); return; }
 
-        ItemStack purchase = new ItemStack(shopItem.itemStack.getItem(), count, shopItem.damage);
+        ItemStack purchase = buildStack(shopItem.itemStack.getItem(), count, shopItem.damage,
+                shopItem.itemStack.stackTagCompound);
 
         if (itemID == 383 && (meta == 90 || meta == 91 || meta == 92 || meta == 100 || meta == 95))
         {
@@ -92,7 +107,7 @@ public class ShopS2C
 
         player.inventory.addItemStackToInventory(purchase);
         MoneyManager.addTenths(player, -cost);
-        sendResult(player, "shop.buy.success|itemID=" + purchase.itemID + "|meta=" + purchase.getItemDamage() + "|count=" + count + "|cost=" + Money.format(cost));
+        sendResult(player, "shop.buy.success|itemID=" + purchase.itemID + "|meta=" + purchase.getItemSubtype() + "|count=" + count + "|cost=" + Money.format(cost));
         syncInventory(player);
         syncBalance(player);
     }
@@ -105,7 +120,7 @@ public class ShopS2C
         ItemStack target = player.inventory.mainInventory[slotIndex];
         if (target == null || target.itemID != itemID) { sendResult(player, "shop.failed"); return; }
 
-        ShopListing shopItem = GoodsConfig.get(itemID, target.getItemDamage());
+        ShopListing shopItem = GoodsConfig.get(target);
 
         if (!ShopConfig.FORCE_SELL_UNLISTED.getBooleanValue())
         {
@@ -207,8 +222,7 @@ public class ShopS2C
         Item item = (gl.itemId >= 0 && gl.itemId < Item.itemsList.length) ? Item.itemsList[gl.itemId] : null;
         if (item == null) { sendResult(buyer, "gshop.buy.not_found"); return; }
 
-        ItemStack testStack = new ItemStack(item, tentativeCount, gl.meta);
-        if (gl.nbt != null) testStack.stackTagCompound = (NBTTagCompound) gl.nbt.copy();
+        ItemStack testStack = buildStack(item, tentativeCount, gl.meta, gl.nbt);
         if (!canFit(buyer, testStack)) { sendResult(buyer, "gshop.inventory.full"); return; }
 
         int bought = GlobalShopData.buy(listingId, tentativeCount);
@@ -217,8 +231,7 @@ public class ShopS2C
         int finalCost = gl.priceTenths * bought;
         if (MoneyManager.getBalanceTenths(buyer) < finalCost) { sendResult(buyer, "gshop.buy.not_enough_money"); return; }
 
-        ItemStack deliver = new ItemStack(item, bought, gl.meta);
-        if (gl.nbt != null) deliver.stackTagCompound = (NBTTagCompound) gl.nbt.copy();
+        ItemStack deliver = buildStack(item, bought, gl.meta, gl.nbt);
 
         buyer.inventory.addItemStackToInventory(deliver);
         MoneyManager.addTenths(buyer, -finalCost);
@@ -331,8 +344,7 @@ public class ShopS2C
         while (remaining > 0)
         {
             int take = Math.min(maxStack, remaining);
-            ItemStack stack = new ItemStack(item, take, removed.meta);
-            if (removed.nbt != null) stack.stackTagCompound = (NBTTagCompound) removed.nbt.copy();
+            ItemStack stack = buildStack(item, take, removed.meta, removed.nbt);
 
             if (!canFit(player, stack))
             {
@@ -378,8 +390,8 @@ public class ShopS2C
         if (slotIndex < 0 || slotIndex >= seller.inventory.mainInventory.length)    { sendResult(seller, "gshop.listing.add.fail_no_item");     return; }
 
         ItemStack stack = seller.inventory.mainInventory[slotIndex];
-        if (stack == null)                                                           { sendResult(seller, "gshop.listing.add.fail_no_item");     return; }
-        if (stack.itemID != order.itemId || stack.getItemDamage() != order.meta)    { sendResult(seller, "gshop.buyorder.wrong_item");           return; }
+        if (stack == null) { sendResult(seller, "gshop.listing.add.fail_no_item");     return; }
+        if (stack.itemID != order.itemId || stack.getItemSubtype() != order.meta)    { sendResult(seller, "gshop.buyorder.wrong_item");           return; }
 
         int give;
         if (order.amount == -1)
@@ -405,8 +417,7 @@ public class ShopS2C
         stack.stackSize -= give;
         if (stack.stackSize <= 0) seller.inventory.mainInventory[slotIndex] = null;
 
-        ItemStack deliver = new ItemStack(stack.getItem(), give, stack.getItemDamage());
-        if (stack.stackTagCompound != null) deliver.stackTagCompound = (NBTTagCompound) stack.stackTagCompound.copy();
+        ItemStack deliver = buildStack(stack.getItem(), give, stack.getItemSubtype(), stack.stackTagCompound);
         MailboxManager.deliver(buyerId, deliver);
 
         ServerPlayer onlineBuyer = null;
@@ -455,78 +466,118 @@ public class ShopS2C
 
     // ===== Slot-based listing =====
 
-    public static void listGlobalFromSlot(ServerPlayer player, int itemId, int meta, int amount, int priceTenths, int slotIndex)
+    public static void listGlobalFromSlot(ServerPlayer player, int itemId, int meta, int amount, int priceTenths, int slotIndex, boolean creative, NBTTagCompound templateNbt)
     {
-        if (slotIndex < 0 || slotIndex >= player.inventory.mainInventory.length) { sendResult(player, "gshop.listing.add.fail_no_item"); return; }
+        if (priceTenths <= 0) { sendResult(player, "gshop.listing.add.fail_price"); return; }
+        if (amount <= 0)      { sendResult(player, "gshop.listing.add.fail_stack"); return; }
 
-        ItemStack slot = player.inventory.mainInventory[slotIndex];
-        if (slot == null || slot.itemID != itemId || slot.getItemDamage() != meta) { sendResult(player, "gshop.listing.add.fail_no_item"); return; }
-        if (priceTenths <= 0)                                                       { sendResult(player, "gshop.listing.add.fail_price");   return; }
-        if (amount <= 0 || amount > slot.stackSize)                                 { sendResult(player, "gshop.listing.add.fail_stack");   return; }
+        boolean opBypass = creative && (player.capabilities.isCreativeMode
+                || player.mcServer.getConfigurationManager().isPlayerOpped(player.username));
 
-        ItemStack nbtSource = slot.copy();
-        int removed = removeFromSlot(player, slotIndex, amount);
-        if (removed <= 0) { sendResult(player, "gshop.listing.add.fail_stack"); return; }
+        ItemStack nbtSource;
 
-        GlobalListing listing = GlobalShopData.addSellOrder(player, itemId, meta, removed, priceTenths, nbtSource);
+        if (opBypass && slotIndex == -1) {
+            // Creative template: no real slot — build from itemId + meta + templateNbt
+            Item templateItem = (itemId >= 0 && itemId < Item.itemsList.length) ? Item.itemsList[itemId] : null;
+            if (templateItem == null) { sendResult(player, "gshop.listing.add.fail_no_item"); return; }
+            nbtSource = new ItemStack(templateItem, 1, meta);
+            if (templateNbt != null) nbtSource.stackTagCompound = (NBTTagCompound) templateNbt.copy();
+        } else {
+            if (slotIndex < 0 || slotIndex >= player.inventory.mainInventory.length) { sendResult(player, "gshop.listing.add.fail_no_item"); return; }
+            ItemStack slot = player.inventory.mainInventory[slotIndex];
+            if (slot == null || slot.itemID != itemId) { sendResult(player, "gshop.listing.add.fail_no_item"); return; }
+            if (!opBypass && amount > slot.stackSize)  { sendResult(player, "gshop.listing.add.fail_stack");   return; }
+            nbtSource = slot.copy();
+        }
+
+        int trueMeta = nbtSource.getItemSubtype();
+        int removed;
+
+        if (opBypass) {
+            removed = amount;
+        } else {
+            removed = removeFromSlot(player, slotIndex, amount);
+            if (removed <= 0) { sendResult(player, "gshop.listing.add.fail_stack"); return; }
+        }
+
+        GlobalListing listing = GlobalShopData.addSellOrder(player, itemId, trueMeta, removed, priceTenths, nbtSource);
         if (listing == null)
         {
-            // cap exceeded — refund the deducted items
-            ItemStack refund = nbtSource.copy();
-            refund.stackSize = removed;
-            if (!player.inventory.addItemStackToInventory(refund)) player.dropPlayerItem(refund);
+            if (!opBypass) {
+                ItemStack refund = buildStack(Item.itemsList[itemId], removed, trueMeta, nbtSource.stackTagCompound);
+                if (!player.inventory.addItemStackToInventory(refund)) player.dropPlayerItem(refund);
+            }
             sendResult(player, "gshop.listing.add.fail_cap");
             syncInventory(player);
             return;
         }
-        sendResult(player, "gshop.listing.add.success|itemID=" + itemId + "|meta=" + meta + "|count=" + listing.amount + "|price=" + Money.format(listing.priceTenths));
+        sendResult(player, "gshop.listing.add.success|itemID=" + itemId + "|meta=" + trueMeta + "|count=" + listing.amount + "|price=" + Money.format(listing.priceTenths));
         broadcastGlobalSnapshot();
         syncInventory(player);
     }
 
+    public static void listGlobalFromSlot(ServerPlayer player, int itemId, int meta, int amount, int priceTenths, int slotIndex, boolean creative)
+    {
+        listGlobalFromSlot(player, itemId, meta, amount, priceTenths, slotIndex, creative, null);
+    }
+
+    public static void listGlobalFromSlot(ServerPlayer player, int itemId, int meta, int amount, int priceTenths, int slotIndex)
+    {
+        listGlobalFromSlot(player, itemId, meta, amount, priceTenths, slotIndex, false, null);
+    }
+
     /** Lists a sell order from a slot in the player's currently open external container (chest, etc.). */
-    public static void listGlobalFromContainerSlot(ServerPlayer player, int itemId, int meta, int amount, int priceTenths, int windowId, int containerSlotNumber)
+    public static void listGlobalFromContainerSlot(ServerPlayer player, int itemId, int meta, int amount, int priceTenths, int windowId, int containerSlotNumber, boolean creative)
     {
         if (player.openContainer == null || player.openContainer.windowId != windowId) { sendResult(player, "gshop.listing.add.fail_no_item"); return; }
         if (priceTenths <= 0)                                                           { sendResult(player, "gshop.listing.add.fail_price");   return; }
+        if (amount <= 0)                                                                { sendResult(player, "gshop.listing.add.fail_stack");   return; }
 
         Slot containerSlot = player.openContainer.getSlot(containerSlotNumber);
         if (!containerSlot.getHasStack()) { sendResult(player, "gshop.listing.add.fail_no_item"); return; }
 
         ItemStack slotStack = containerSlot.getStack();
-        if (slotStack.itemID != itemId || slotStack.getItemDamage() != meta) { sendResult(player, "gshop.listing.add.fail_no_item"); return; }
-        if (amount <= 0 || amount > slotStack.stackSize)                     { sendResult(player, "gshop.listing.add.fail_stack");   return; }
+        if (slotStack.itemID != itemId) { sendResult(player, "gshop.listing.add.fail_no_item"); return; }
 
+        boolean opBypass = creative && (player.capabilities.isCreativeMode
+                || player.mcServer.getConfigurationManager().isPlayerOpped(player.username));
+
+        if (!opBypass && amount > slotStack.stackSize) { sendResult(player, "gshop.listing.add.fail_stack"); return; }
+
+        int trueMeta = slotStack.getItemSubtype();
         ItemStack nbtSource = slotStack.copy();
-        boolean wasNulled = slotStack.stackSize == amount;
-        slotStack.stackSize -= amount;
-        if (slotStack.stackSize <= 0) containerSlot.putStack(null);
-        else containerSlot.onSlotChanged();
-        player.openContainer.detectAndSendChanges();
 
-        GlobalListing listing = GlobalShopData.addSellOrder(player, itemId, meta, amount, priceTenths, nbtSource);
-        if (listing == null)
-        {
-            // cap exceeded — restore the deducted items back into the slot
-            ItemStack restore = nbtSource.copy();
-            restore.stackSize = amount;
-            if (wasNulled)
-            {
-                containerSlot.putStack(restore);
-            }
-            else
-            {
-                slotStack.stackSize += amount;
-                containerSlot.onSlotChanged();
-            }
+        if (!opBypass) {
+            boolean wasNulled = slotStack.stackSize == amount;
+            slotStack.stackSize -= amount;
+            if (slotStack.stackSize <= 0) containerSlot.putStack(null);
+            else containerSlot.onSlotChanged();
             player.openContainer.detectAndSendChanges();
-            sendResult(player, "gshop.listing.add.fail_cap");
+
+            GlobalListing listing = GlobalShopData.addSellOrder(player, itemId, trueMeta, amount, priceTenths, nbtSource);
+            if (listing == null)
+            {
+                // cap exceeded — restore items
+                ItemStack restore = nbtSource.copy();
+                restore.stackSize = amount;
+                if (wasNulled) containerSlot.putStack(restore);
+                else { slotStack.stackSize += amount; containerSlot.onSlotChanged(); }
+                player.openContainer.detectAndSendChanges();
+                sendResult(player, "gshop.listing.add.fail_cap");
+                syncInventory(player);
+                return;
+            }
+            sendResult(player, "gshop.listing.add.success|itemID=" + itemId + "|meta=" + trueMeta + "|count=" + listing.amount + "|price=" + Money.format(listing.priceTenths));
+            broadcastGlobalSnapshot();
             syncInventory(player);
-            return;
+        } else {
+            // OP/creative bypass — list without touching the container
+            GlobalListing listing = GlobalShopData.addSellOrder(player, itemId, trueMeta, amount, priceTenths, nbtSource);
+            if (listing == null) { sendResult(player, "gshop.listing.add.fail_cap"); return; }
+            sendResult(player, "gshop.listing.add.success|itemID=" + itemId + "|meta=" + trueMeta + "|count=" + listing.amount + "|price=" + Money.format(listing.priceTenths));
+            broadcastGlobalSnapshot();
+            syncInventory(player);
         }
-        sendResult(player, "gshop.listing.add.success|itemID=" + itemId + "|meta=" + meta + "|count=" + listing.amount + "|price=" + Money.format(listing.priceTenths));
-        broadcastGlobalSnapshot();
-        syncInventory(player);
     }
 
     // ===== Shared Utility =====
@@ -541,6 +592,18 @@ public class ShopS2C
         return removed;
     }
 
+    /**
+     * Creates an ItemStack with itemDamage=meta AND the provided NBT applied.
+     * This ensures correct behaviour for both vanilla damage-based meta items and
+     * MITE NBT-subtype items (where getItemSubtype() reads from stackTagCompound).
+     */
+    private static ItemStack buildStack(Item item, int count, int meta, NBTTagCompound nbt)
+    {
+        ItemStack stack = new ItemStack(item, count, meta);
+        if (nbt != null) stack.stackTagCompound = (NBTTagCompound) nbt.copy();
+        return stack;
+    }
+
     private static boolean canFit(ServerPlayer player, ItemStack stack)
     {
         if (stack == null || stack.stackSize <= 0) return true;
@@ -552,7 +615,7 @@ public class ShopS2C
         for (ItemStack slot : inv)
         {
             if (slot == null) continue;
-            if (slot.itemID == stack.itemID && slot.getItemDamage() == stack.getItemDamage() && nbtEqual(slot.stackTagCompound, stack.stackTagCompound))
+            if (slot.itemID == stack.itemID && slot.getItemSubtype() == stack.getItemSubtype() && nbtEqual(slot.stackTagCompound, stack.stackTagCompound))
             {
                 int space = Math.min(maxStack, slot.getMaxStackSize()) - slot.stackSize;
                 if (space > 0)

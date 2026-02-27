@@ -10,6 +10,7 @@ import net.minecraft.EntityPlayer;
 import net.minecraft.Minecraft;
 import net.minecraft.ResourceLocation;
 
+import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,10 +32,17 @@ public class S2CSystemShopOpenPacket implements Packet {
         this.entries = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             SystemShopClientCatalog.Entry e = new SystemShopClientCatalog.Entry();
-            e.itemID = buf.readInt();
-            e.meta = buf.readInt();
-            e.buyTenths = buf.readInt();
+            e.itemID     = buf.readInt();
+            e.meta       = buf.readInt();
+            e.buyTenths  = buf.readInt();
             e.sellTenths = buf.readInt();
+            boolean hasNbt = buf.readBoolean();
+            if (hasNbt) {
+                int len = buf.readUnsignedShort();
+                byte[] data = new byte[len];
+                buf.readFully(data);
+                e.nbtCompressed = data;
+            }
             entries.add(e);
         }
     }
@@ -55,6 +63,13 @@ public class S2CSystemShopOpenPacket implements Packet {
             buf.writeInt(e.meta);
             buf.writeInt(e.buyTenths);
             buf.writeInt(e.sellTenths);
+            if (e.nbtCompressed != null && e.nbtCompressed.length > 0) {
+                buf.writeBoolean(true);
+                buf.writeShort(e.nbtCompressed.length);
+                buf.write(e.nbtCompressed, 0, e.nbtCompressed.length);
+            } else {
+                buf.writeBoolean(false);
+            }
         }
     }
 

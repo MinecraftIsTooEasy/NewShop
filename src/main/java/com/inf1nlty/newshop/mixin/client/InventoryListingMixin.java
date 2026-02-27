@@ -44,22 +44,21 @@ public abstract class InventoryListingMixin
         if (found == null || !found.getHasStack()) return;
 
         ItemStack stack = found.getStack().copy();
+        boolean creative = mc.thePlayer.capabilities.isCreativeMode;
 
-        if (found.inventory == mc.thePlayer.inventory)
-        {
+        if (creative) {
+            // In creative mode: use the hovered item as a template regardless of which
+            // inventory it came from (creative tabs, hotbar, etc.).
+            // slotIndex=-1 tells the server to skip inventory deduction entirely.
+            stack.stackSize = 1;
+            mc.displayGuiScreen(new GuiCreateListing(self, stack, -1, -1, false, true));
+        } else if (found.inventory == mc.thePlayer.inventory) {
+            int slotIdx = found.slotIndex;
             ItemStack[] mainInv = mc.thePlayer.inventory.mainInventory;
-            ItemStack   actual  = found.getStack();
-            int slotIdx = -1;
-            for (int i = 0; i < mainInv.length; i++)
-            {
-                if (mainInv[i] == actual) { slotIdx = i; break; }
-            }
-            if (slotIdx < 0) return;
-            mc.displayGuiScreen(new GuiCreateListing(self, stack, slotIdx));
-        }
-        else
-        {
-            mc.displayGuiScreen(new GuiCreateListing(self, stack, found.slotNumber, self.inventorySlots.windowId, true));
+            if (slotIdx < 0 || slotIdx >= mainInv.length || mainInv[slotIdx] == null) return;
+            mc.displayGuiScreen(new GuiCreateListing(self, stack, slotIdx, -1, false, false));
+        } else {
+            mc.displayGuiScreen(new GuiCreateListing(self, stack, found.slotNumber, self.inventorySlots.windowId, true, false));
         }
 
         ci.cancel();

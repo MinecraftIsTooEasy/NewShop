@@ -1,5 +1,6 @@
 package com.inf1nlty.newshop.mixin.client;
 
+import com.inf1nlty.newshop.client.gui.GuiCreateListing;
 import com.inf1nlty.newshop.client.gui.GuiEditPrice;
 import dev.emi.emi.api.stack.EmiStack;
 import dev.emi.emi.api.stack.EmiStackInteraction;
@@ -15,15 +16,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.List;
 
-/** Alt + Left-Click on an EMI sidebar item opens {@link GuiEditPrice} for OPs to set system shop prices. */
+/**
+ * Alt + Left-Click  on an EMI sidebar item → opens {@link GuiEditPrice}   (OP/creative: set system shop price).
+ * Alt + Right-Click on an EMI sidebar item → opens {@link GuiCreateListing} (OP/creative: list to global shop).
+ */
 @Pseudo
 @Mixin(EmiScreenManager.class)
-public class EmiShopPriceMixin
-{
+public class EmiShopPriceMixin {
+
     @Inject(method = "mouseClicked(DDI)Z", at = @At("HEAD"), cancellable = true, remap = false)
     private static void shop$onMouseClicked(double mx, double my, int button, CallbackInfoReturnable<Boolean> cir)
     {
-        if (button != 0) return;
+        // We only care about Alt + left-click (0) or Alt + right-click (1)
+        if (button != 0 && button != 1) return;
 
         boolean altDown = Keyboard.isKeyDown(Keyboard.KEY_LMENU) || Keyboard.isKeyDown(Keyboard.KEY_RMENU);
         if (!altDown) return;
@@ -45,7 +50,14 @@ public class EmiShopPriceMixin
 
         ItemStack copy = itemStack.copy();
         copy.stackSize = 1;
-        mc.displayGuiScreen(new GuiEditPrice(mc.currentScreen, copy));
+
+        if (button == 0) {
+            // Alt + Left-Click: edit system shop price
+            mc.displayGuiScreen(new GuiEditPrice(mc.currentScreen, copy));
+        } else {
+            // Alt + Right-Click: list item to global shop (creative/OP bypass — no inventory required)
+            mc.displayGuiScreen(new GuiCreateListing(mc.currentScreen, copy, -1, -1, false, true));
+        }
         cir.setReturnValue(true);
     }
 }

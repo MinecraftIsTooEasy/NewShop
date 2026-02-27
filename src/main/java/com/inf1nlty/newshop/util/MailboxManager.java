@@ -49,7 +49,7 @@ public class MailboxManager {
         for (int slotIndex = 0; slotIndex < inventory.getSizeInventory(); slotIndex++) {
             ItemStack existing = inventory.getStackInSlot(slotIndex);
             if (existing != null && existing.itemID == stack.itemID
-                    && existing.getItemDamage() == stack.getItemDamage()
+                    && existing.getItemSubtype() == stack.getItemSubtype()
                     && Objects.equals(existing.stackTagCompound, stack.stackTagCompound)) {
                 int space = maxStack - existing.stackSize;
                 if (space > 0) {

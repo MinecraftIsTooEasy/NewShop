@@ -2,27 +2,57 @@ package com.inf1nlty.newshop;
 
 import com.inf1nlty.newshop.api.ShopPluginLoader;
 import net.minecraft.Block;
+import net.minecraft.CompressedStreamTools;
 import net.minecraft.Item;
 import net.minecraft.ItemStack;
+import net.minecraft.NBTTagCompound;
 
 import java.io.*;
 import java.util.*;
+import java.util.Base64;
 
 /**
  * Loads system shop items from config/newshop.cfg.
+ *
+ * <p>Config line format:
+ * <pre>
+ *   id[:meta][|base64nbt] = buyPrice,sellPrice
+ * </pre>
+ * Items without gameplay NBT use the fast {@code int} composite key.
+ * Items WITH NBT (enchanted books, gear, …) use a secondary {@code String} map
+ * keyed by {@code "id:meta:base64nbt"} so they don't collide with plain items.
  */
 public class GoodsConfig {
 
-    private static Map<Integer, ShopListing> itemMap  = new HashMap<>();
-    private static List<ShopListing>         itemList = new ArrayList<>();
+    private static Map<Integer, ShopListing> itemMap    = new HashMap<>();
+    /** Secondary map for NBT-specific entries (e.g. enchanted items). */
+    private static Map<String,  ShopListing> nbtItemMap = new LinkedHashMap<>();
+    private static List<ShopListing>         itemList   = new ArrayList<>();
     private static long lastLoadTime = 0L;
     private static final long RELOAD_MS = 3000;
 
     private GoodsConfig() {}
 
+    /** Looks up a plain (non-NBT) listing by itemID + meta. */
     public static synchronized ShopListing get(int id, int dmg) {
         ensure();
         return itemMap.get(compositeKey(id, dmg));
+    }
+
+    /**
+     * Looks up the best-matching listing for an ItemStack.
+     * Tries the NBT-specific map first, then falls back to the plain map.
+     */
+    public static synchronized ShopListing get(ItemStack stack) {
+        if (stack == null) return null;
+        ensure();
+        NBTTagCompound gameplay = ShopListing.stripShopTags(stack.stackTagCompound);
+        if (gameplay != null) {
+            String nbtKey = nbtCompositeKey(stack.itemID, stack.getItemSubtype(), gameplay);
+            ShopListing hit = nbtItemMap.get(nbtKey);
+            if (hit != null) return hit;
+        }
+        return itemMap.get(compositeKey(stack.itemID, stack.getItemSubtype()));
     }
 
     public static synchronized List<ShopListing> getItems() {
@@ -50,7 +80,8 @@ public class GoodsConfig {
     private static void loadInternal(File file) {
         if (!file.exists()) generateDefault(file);
 
-        Map<Integer, ShopListing> deduped = new LinkedHashMap<>();
+        Map<Integer, ShopListing> deduped    = new LinkedHashMap<>();
+        Map<String,  ShopListing> dedupedNbt = new LinkedHashMap<>();
 
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
@@ -59,10 +90,19 @@ public class GoodsConfig {
                 if (line.isEmpty() || line.startsWith("#")) continue;
                 if (line.startsWith("force_sell_unlisted") || line.startsWith("skyblock_mode") || line.startsWith("announceGlobalListing")) continue;
 
-                String[] parts = line.split("=");
+                String[] parts = line.split("=", 2);
                 if (parts.length != 2) continue;
 
-                IdMeta parsed = parseIdentifier(parts[0].trim());
+                // Split identifier: "id[:meta][|base64nbt]"
+                String   identRaw = parts[0].trim();
+                String   nbtB64   = null;
+                int      pipeIdx  = identRaw.indexOf('|');
+                if (pipeIdx >= 0) {
+                    nbtB64   = identRaw.substring(pipeIdx + 1).trim();
+                    identRaw = identRaw.substring(0, pipeIdx).trim();
+                }
+
+                IdMeta parsed = parseIdentifier(identRaw);
                 if (parsed.id < 0) continue;
 
                 String[] priceParts = parts[1].split(",");
@@ -77,27 +117,50 @@ public class GoodsConfig {
                 Item base = Item.itemsList[parsed.id];
                 if (base == null) continue;
 
-                ShopListing shopItem        = new ShopListing();
+                NBTTagCompound nbt = null;
+                if (nbtB64 != null && !nbtB64.isEmpty()) {
+                    try {
+                        byte[] data = Base64.getUrlDecoder().decode(nbtB64);
+                        nbt = CompressedStreamTools.readCompressed(new ByteArrayInputStream(data));
+                    } catch (Exception ignored) {}
+                }
+
+                ShopListing shopItem     = new ShopListing();
                 shopItem.itemID          = parsed.id;
                 shopItem.damage          = parsed.meta;
                 shopItem.buyPriceTenths  = buy;
                 shopItem.sellPriceTenths = sell;
+                shopItem.nbt             = nbt;
                 shopItem.itemStack       = new ItemStack(base, 1, parsed.meta);
+                if (nbt != null) shopItem.itemStack.stackTagCompound = (NBTTagCompound) nbt.copy();
                 shopItem.displayName     = shopItem.itemStack.getDisplayName();
-                deduped.put(compositeKey(parsed.id, parsed.meta), shopItem);
+
+                if (nbt != null) {
+                    dedupedNbt.put(nbtCompositeKey(parsed.id, parsed.meta, nbt), shopItem);
+                } else {
+                    deduped.put(compositeKey(parsed.id, parsed.meta), shopItem);
+                }
             }
         }
         catch (Exception ignored) {}
 
         List<ShopListing> list = new ArrayList<>(deduped.values());
+        list.addAll(dedupedNbt.values());
         Map<Integer, ShopListing> map = new LinkedHashMap<>(deduped);
 
         ShopPluginLoader.applyAll(list, map);
 
         itemList     = list;
         itemMap      = map;
+        nbtItemMap   = new LinkedHashMap<>(dedupedNbt);
+        // Add any NBT entries added by plugins into nbtItemMap too
+        for (ShopListing sl : list) {
+            if (sl.nbt != null) nbtItemMap.putIfAbsent(nbtCompositeKey(sl.itemID, sl.damage, sl.nbt), sl);
+        }
         lastLoadTime = System.currentTimeMillis();
     }
+
+    // ...existing code...
 
     private static Integer parsePriceTenths(String raw) {
         raw = raw.trim();
@@ -164,8 +227,8 @@ public class GoodsConfig {
             if (dir != null && !dir.exists()) dir.mkdirs();
             if (!file.exists()) file.createNewFile();
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-                writer.write("# 系统商店配置文件，支持 id[:meta] 或 minecraft:name[:meta] 格式；价格为一位小数 (buyPrice,sellPrice)\n");
-                writer.write("# System Shop Config: Supports id[:meta] or minecraft:name[:meta] format; price is one decimal (buyPrice,sellPrice)\n");
+                writer.write("# 系统商店配置文件，支持 id[:meta][|base64nbt] 或 minecraft:name[:meta] 格式；价格为一位小数 (buyPrice,sellPrice)\n");
+                writer.write("# System Shop Config: Supports id[:meta][|base64nbt] or minecraft:name[:meta] format; price is one decimal (buyPrice,sellPrice)\n");
                 writer.write("# id=buy,sell\n\n");
                 writer.write("# 1就是石头的ID，=号后面为出售价,回收价\n\n");
                 writer.write("# 1=1,1\n\n");
@@ -178,12 +241,29 @@ public class GoodsConfig {
         return ((id & 0xFFFF) << 16) | (dmg & 0xFFFF);
     }
 
-    /** Sets or updates the buy/sell price for an item in newshop.cfg and in-memory state. */
-    public static synchronized void savePrice(int itemID, int meta, int buyTenths, int sellTenths) {
+    /** Stable string key for NBT-specific entries: "id:meta:base64nbt". */
+    public static String nbtCompositeKey(int id, int meta, NBTTagCompound nbt) {
+        try {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            CompressedStreamTools.writeCompressed(nbt, bos);
+            return id + ":" + meta + ":" + Base64.getUrlEncoder().withoutPadding().encodeToString(bos.toByteArray());
+        } catch (Exception e) { return id + ":" + meta + ":?"; }
+    }
+
+    /** Sets or updates the buy/sell price for an item (with optional gameplay NBT) in newshop.cfg and in-memory state. */
+    public static synchronized void savePrice(int itemID, int meta, int buyTenths, int sellTenths, NBTTagCompound nbt) {
         File file = new File("config/newshop.cfg");
         if (!file.exists()) generateDefault(file);
 
-        String key     = meta == 0 ? String.valueOf(itemID) : (itemID + ":" + meta);
+        String nbtB64  = "";
+        if (nbt != null) {
+            try {
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                CompressedStreamTools.writeCompressed(nbt, bos);
+                nbtB64 = "|" + Base64.getUrlEncoder().withoutPadding().encodeToString(bos.toByteArray());
+            } catch (Exception ignored) {}
+        }
+        String key     = (meta == 0 ? String.valueOf(itemID) : (itemID + ":" + meta)) + nbtB64;
         String newLine = key + "=" + formatTenths(buyTenths) + "," + formatTenths(sellTenths);
 
         try {
@@ -194,7 +274,7 @@ public class GoodsConfig {
                 while ((line = reader.readLine()) != null) {
                     String trimmed = line.trim();
                     if (!trimmed.startsWith("#") && !trimmed.isEmpty()) {
-                        String[] parts = trimmed.split("=");
+                        String[] parts = trimmed.split("=", 2);
                         if (parts.length >= 2 && parts[0].trim().equals(key)) {
                             lines.add(newLine);
                             found = true;
@@ -214,26 +294,45 @@ public class GoodsConfig {
         Item base = Item.itemsList[itemID];
         if (base == null) return;
 
-        ShopListing shopItem        = new ShopListing();
+        ShopListing shopItem     = new ShopListing();
         shopItem.itemID          = itemID;
         shopItem.damage          = meta;
         shopItem.buyPriceTenths  = buyTenths;
         shopItem.sellPriceTenths = sellTenths;
+        shopItem.nbt             = nbt;
         shopItem.itemStack       = new ItemStack(base, 1, meta);
+        if (nbt != null) shopItem.itemStack.stackTagCompound = (NBTTagCompound) nbt.copy();
         shopItem.displayName     = shopItem.itemStack.getDisplayName();
 
-        itemMap.put(compositeKey(itemID, meta), shopItem);
-
-        for (ShopListing existing : itemList) {
-            if (existing.itemID == itemID && existing.damage == meta) {
-                existing.buyPriceTenths  = buyTenths;
-                existing.sellPriceTenths = sellTenths;
-                lastLoadTime = 0L;
-                return;
+        if (nbt != null)
+        {
+            nbtItemMap.put(nbtCompositeKey(itemID, meta, nbt), shopItem);
+            // Also update itemList
+            String nbtK = nbtCompositeKey(itemID, meta, nbt);
+            for (ShopListing existing : itemList)
+            {
+                if (existing.nbt != null && nbtCompositeKey(existing.itemID, existing.damage, existing.nbt).equals(nbtK))
+                {
+                    existing.buyPriceTenths = buyTenths; existing.sellPriceTenths = sellTenths; lastLoadTime = 0L; return;
+                }
+            }
+        }
+        else
+        {
+            itemMap.put(compositeKey(itemID, meta), shopItem);
+            for (ShopListing existing : itemList) {
+                if (existing.nbt == null && existing.itemID == itemID && existing.damage == meta) {
+                    existing.buyPriceTenths = buyTenths; existing.sellPriceTenths = sellTenths; lastLoadTime = 0L; return;
+                }
             }
         }
         itemList.add(shopItem);
         lastLoadTime = 0L;
+    }
+
+    /** Convenience overload for plain (non-NBT) items. */
+    public static synchronized void savePrice(int itemID, int meta, int buyTenths, int sellTenths) {
+        savePrice(itemID, meta, buyTenths, sellTenths, null);
     }
 
     private static String formatTenths(int tenths) {

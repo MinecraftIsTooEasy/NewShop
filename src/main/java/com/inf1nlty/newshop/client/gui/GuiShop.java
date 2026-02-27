@@ -1,5 +1,6 @@
 package com.inf1nlty.newshop.client.gui;
 
+import com.inf1nlty.newshop.ShopListing;
 import com.inf1nlty.newshop.client.state.ShopClientData;
 import com.inf1nlty.newshop.client.state.SystemShopClientCatalog;
 import com.inf1nlty.newshop.inventory.ContainerShopPlayer;
@@ -13,6 +14,7 @@ import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
 
+import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -368,7 +370,7 @@ public class GuiShop extends GuiContainer {
         }
         if (ShopClientData.inShop) {
             for (SystemShopClientCatalog.Entry e : viewEntries) {
-                if (e.itemID == stack.itemID && e.meta == stack.getItemDamage()) {
+                if (e.itemID == stack.itemID && e.meta == stack.getItemSubtype() && nbtMatchesEntry(e, stack)) {
                     tip.add("§e" + I18n.getString("shop.price")     + ": §f" + Money.format(e.buyTenths));
                     tip.add("§a" + I18n.getString("shop.sellprice") + ": §f" + Money.format(e.sellTenths));
                     if (mc.thePlayer.capabilities.isCreativeMode)
@@ -423,7 +425,7 @@ public class GuiShop extends GuiContainer {
                 for (int i = 0; i < mc.thePlayer.inventory.mainInventory.length; i++) {
                     ItemStack stack = mc.thePlayer.inventory.mainInventory[i];
                     if (stack != null && stack.itemID == s.itemID
-                            && stack.getItemDamage() == s.getItemDamage()
+                            && stack.getItemSubtype() == s.getItemSubtype()
                             && !isEquipment(stack.getItem())) {
                         ShopC2S.sendSellRequest(stack.itemID, stack.stackSize, i);
                     }
@@ -463,7 +465,7 @@ public class GuiShop extends GuiContainer {
                     return;
                 }
                 int count = shift ? Item.itemsList[entry.itemID].maxStackSize : 1;
-                if (!alt) ShopC2S.sendPurchaseRequest(entry.itemID, entry.meta, count);
+                if (!alt) ShopC2S.sendPurchaseRequest(entry.itemID, entry.meta, count, entry.nbtCompressed);
                 return;
             }
         }
@@ -535,6 +537,19 @@ public class GuiShop extends GuiContainer {
         return item instanceof ItemArmor || item instanceof ItemTool
                 || item instanceof ItemBow || item instanceof ItemHoe
                 || item instanceof ItemFishingRod || item instanceof ItemShears;
+    }
+
+    /** Returns true if the entry has no NBT (matches any item) or its NBT matches the stack's gameplay NBT. */
+    private boolean nbtMatchesEntry(SystemShopClientCatalog.Entry entry, ItemStack stack) {
+        if (entry.nbtCompressed == null || entry.nbtCompressed.length == 0) {
+            return ShopListing.stripShopTags(stack.stackTagCompound) == null;
+        }
+        try {
+            NBTTagCompound entryNbt = CompressedStreamTools.readCompressed(
+                    new ByteArrayInputStream(entry.nbtCompressed));
+            NBTTagCompound stackNbt = ShopListing.stripShopTags(stack.stackTagCompound);
+            return entryNbt.equals(stackNbt);
+        } catch (Exception ex) { return false; }
     }
 
     void blit(int x, int y, int u, int v, int w, int h) {

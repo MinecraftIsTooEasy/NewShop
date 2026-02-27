@@ -33,7 +33,6 @@ public abstract class SlotHoverHintMixin extends GuiScreen
 
         boolean isOp = mc.thePlayer != null && mc.thePlayer.capabilities.isCreativeMode;
 
-        // EMI sidebar hover: show edit-price hint for OP
         if (isOp)
         {
             EmiStackInteraction emiHovered = EmiScreenManager.getHoveredStack(mouseX, mouseY, false);
@@ -44,7 +43,9 @@ public abstract class SlotHoverHintMixin extends GuiScreen
                         && stacks.get(0).getItemStack() != null)
                 {
                     List<String> hints = new ArrayList<>();
+
                     hints.add("§7" + I18n.getString("shop.hint.altleft.editprice"));
+                    hints.add("§7" + I18n.getString("shop.hint.altright.list"));
                     func_102021_a(hints, mouseX, mouseY);
                     return;
                 }
@@ -55,9 +56,11 @@ public abstract class SlotHoverHintMixin extends GuiScreen
         if (theSlot == null || !theSlot.getHasStack()) return;
 
         List<String> hints = new ArrayList<>();
-        hints.add("§7" + I18n.getString("shop.hint.altright.list"));
+
         if (isOp)
             hints.add("§7" + I18n.getString("shop.hint.altleft.editprice"));
+
+        hints.add("§7" + I18n.getString("shop.hint.altright.list"));
 
         func_102021_a(hints, mouseX, mouseY);
     }

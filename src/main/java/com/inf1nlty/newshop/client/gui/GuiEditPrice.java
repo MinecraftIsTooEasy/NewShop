@@ -1,10 +1,13 @@
 package com.inf1nlty.newshop.client.gui;
 
+import com.inf1nlty.newshop.ShopListing;
 import com.inf1nlty.newshop.network.ShopC2S;
 import net.minecraft.*;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
+
+import java.io.ByteArrayOutputStream;
 
 /** GUI for editing the buy/sell price of a system shop item. Opened by Alt+Left-Click on an EMI item. */
 public class GuiEditPrice extends GuiScreen {
@@ -63,7 +66,17 @@ public class GuiEditPrice extends GuiScreen {
     protected void actionPerformed(GuiButton button)
     {
         if (!button.enabled || button.id != BTN_DONE) return;
-        ShopC2S.sendSetPrice(editStack.itemID, editStack.getItemDamage(), parseTenths(buyPriceField), parseTenths(sellPriceField));
+
+        NBTTagCompound gameplayNbt = ShopListing.stripShopTags(editStack.stackTagCompound);
+        byte[] nbtData = null;
+        if (gameplayNbt != null) {
+            try {
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                CompressedStreamTools.writeCompressed(gameplayNbt, bos);
+                nbtData = bos.toByteArray();
+            } catch (Exception ignored) {}
+        }
+        ShopC2S.sendSetPrice(editStack.itemID, editStack.getItemSubtype(), parseTenths(buyPriceField), parseTenths(sellPriceField), nbtData);
         mc.displayGuiScreen(parentScreen);
     }
 

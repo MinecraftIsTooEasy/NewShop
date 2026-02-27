@@ -36,6 +36,16 @@ public interface ShopRegistry {
     void addItem(Item item, int meta, double buyPrice, double sellPrice);
 
     /**
+     * Register a specific item stack (preserving its NBT for NBT-subtype items).
+     * Uses {@link ItemStack#getItemSubtype()} as the meta key.
+     * Default implementation falls back to {@link #addItem(Item, int, double, double)}.
+     */
+    default void addItemStack(ItemStack source, double buyPrice, double sellPrice) {
+        if (source == null || source.getItem() == null) return;
+        addItem(source.getItem(), source.getItemSubtype(), buyPrice, sellPrice);
+    }
+
+    /**
      * Convenience – registers meta 0 only.
      */
     default void addItem(Item item, double buyPrice, double sellPrice) {
@@ -58,7 +68,8 @@ public interface ShopRegistry {
         } else {
             for (ItemStack stack : subs) {
                 if (stack != null) {
-                    addItem(item, stack.getItemDamage(), buyPrice, sellPrice);
+                    // Pass the full source stack so NBT-subtype items preserve their variant NBT
+                    addItemStack(stack, buyPrice, sellPrice);
                 }
             }
         }

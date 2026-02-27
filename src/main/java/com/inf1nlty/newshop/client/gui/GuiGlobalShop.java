@@ -117,7 +117,9 @@ public class GuiGlobalShop extends GuiContainer {
                 Item item = (lc.itemId >= 0 && lc.itemId < Item.itemsList.length)
                         ? Item.itemsList[lc.itemId] : null;
                 if (item == null) continue;
-                String name = new ItemStack(item, 1, lc.meta).getDisplayName();
+                ItemStack nameStack = new ItemStack(item, 1, lc.meta);
+                if (lc.nbt != null) nameStack.stackTagCompound = lc.nbt;
+                String name = nameStack.getDisplayName();
                 if (!SearchHelper.matches(name, searchQuery)) continue;
             }
             viewListings.add(lc);
@@ -270,7 +272,7 @@ public class GuiGlobalShop extends GuiContainer {
         GlobalListingClient lc = viewListings.get(gIdx);
         Item item = (lc.itemId >= 0 && lc.itemId < Item.itemsList.length) ? Item.itemsList[lc.itemId] : null;
         if (item == null) return;
-        ItemStack stack = new ItemStack(item, Math.min(item.maxStackSize, lc.amount), lc.meta);
+        ItemStack stack = new ItemStack(item, lc.amount == -1 ? 1 : lc.amount, lc.meta);
         if (lc.nbt != null) stack.stackTagCompound = (NBTTagCompound) lc.nbt.copy();
         if (stack.stackTagCompound == null) stack.stackTagCompound = new NBTTagCompound();
         stack.stackTagCompound.setInteger("GShopPriceTenths", lc.priceTenths);
@@ -343,6 +345,10 @@ public class GuiGlobalShop extends GuiContainer {
         int endIndex   = Math.min(viewListings.size(), startIndex + cap);
         int hoverLocal = getHoverLocalIndex(mouseXAbs - gl, mouseYAbs - gt);
 
+        // Collect count labels to draw after exiting the 3D GL block
+        record CountLabel(int x, int y, String text) {}
+        List<CountLabel> countLabels = new ArrayList<>();
+
         for (int idx = startIndex; idx < endIndex; idx++) {
             GlobalListingClient lc = viewListings.get(idx);
             int local = idx - startIndex;
@@ -350,13 +356,13 @@ public class GuiGlobalShop extends GuiContainer {
             int sy = gt + LISTING_START_Y + (local / LISTING_COLS) * SLOT_SIZE;
             Item item = (lc.itemId >= 0 && lc.itemId < Item.itemsList.length) ? Item.itemsList[lc.itemId] : null;
             if (item == null) continue;
-            ItemStack stack = new ItemStack(item, Math.min(item.maxStackSize, lc.amount), lc.meta);
+            // Build render stack with stackSize=1 so the engine doesn't clamp lc.amount to maxStackSize
+            ItemStack stack = new ItemStack(item, 1, lc.meta);
             if (lc.nbt != null) stack.stackTagCompound = (NBTTagCompound) lc.nbt.copy();
             // Reset zLevel before each item to prevent enchantment effect leaking
             this.zLevel = 100.0F;
             itemRenderer.zLevel = 100.0F;
             itemRenderer.renderItemAndEffectIntoGUI(fontRenderer, mc.renderEngine, stack, sx, sy);
-            itemRenderer.renderItemOverlayIntoGUI(fontRenderer, mc.renderEngine, stack, sx, sy);
             this.zLevel = 0.0F;
             itemRenderer.zLevel = 0.0F;
             drawRect(sx - 1, sy - 1, sx + 17, sy + 17, lc.isBuyOrder ? BUY_BORDER_COLOR : SELL_BORDER_COLOR);
@@ -365,9 +371,12 @@ public class GuiGlobalShop extends GuiContainer {
                 drawGradientRect(sx, sy, sx + 16, sy + 16, HOVER_COLOR, HOVER_COLOR);
                 GL11.glEnable(GL11.GL_LIGHTING);
             }
+            // Queue count label — drawn in 2D after popping the matrix
             if (lc.amount == -1) {
-                String s = "∞";
-                fontRenderer.drawStringWithShadow(s, sx + 16 - fontRenderer.getStringWidth(s), sy + 10, 0xFFFFFF);
+                countLabels.add(new CountLabel(sx, sy, "∞"));
+            } else if (lc.amount > 1) {
+                String s = lc.amount >= 10000 ? (lc.amount / 1000) + "k" : String.valueOf(lc.amount);
+                countLabels.add(new CountLabel(sx, sy, s));
             }
             if (lc.owner != null && lc.owner.equals(mc.thePlayer.username)) {
                 int btnId = BTN_UNLIST_BASE + local;
@@ -380,11 +389,23 @@ public class GuiGlobalShop extends GuiContainer {
         RenderHelper.disableStandardItemLighting();
         GL11.glDisable(GL11.GL_COLOR_MATERIAL);
         GL11.glDisable(GL12.GL_RESCALE_NORMAL);
-        // Fully restore GL blend state that enchantment effect may have changed
         GL11.glDisable(GL11.GL_BLEND);
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
         GL11.glColor4f(1, 1, 1, 1);
         GL11.glPopMatrix();
+
+        // Draw count labels in 2D — identical to vanilla renderItemOverlayIntoGUI
+        if (!countLabels.isEmpty()) {
+            GL11.glDisable(GL11.GL_LIGHTING);
+            GL11.glDisable(GL11.GL_DEPTH_TEST);
+            for (CountLabel lbl : countLabels) {
+                fontRenderer.drawStringWithShadow(lbl.text(),
+                        lbl.x() + 17 - fontRenderer.getStringWidth(lbl.text()),
+                        lbl.y() + 9, 0xFFFFFF);
+            }
+            GL11.glEnable(GL11.GL_LIGHTING);
+            GL11.glEnable(GL11.GL_DEPTH_TEST);
+        }
     }
 
     @Override
@@ -448,7 +469,7 @@ public class GuiGlobalShop extends GuiContainer {
                     if (alt) {
                         for (int i = 0; i < mc.thePlayer.inventory.mainInventory.length; i++) {
                             ItemStack stack = mc.thePlayer.inventory.mainInventory[i];
-                            if (stack != null && stack.itemID == lc.itemId && stack.getItemDamage() == lc.meta && !isEquipment(stack.getItem()))
+                            if (stack != null && stack.itemID == lc.itemId && stack.getItemSubtype() == lc.meta && !isEquipment(stack.getItem()))
                                 ShopC2S.sendSellToBuyOrder(lc.listingId, stack.stackSize, i);
                         }
                         return;
@@ -456,12 +477,12 @@ public class GuiGlobalShop extends GuiContainer {
                     int si = mc.thePlayer.inventory.currentItem;
                     ItemStack hand = mc.thePlayer.inventory.mainInventory[si];
                     if (shift) {
-                        if (hand != null && hand.itemID == lc.itemId && hand.getItemDamage() == lc.meta && !isEquipment(hand.getItem()))
+                        if (hand != null && hand.itemID == lc.itemId && hand.getItemSubtype() == lc.meta && !isEquipment(hand.getItem()))
                             ShopC2S.sendSellToBuyOrder(lc.listingId, Math.min(hand.stackSize, hand.getItem().maxStackSize), si);
                         else mc.thePlayer.addChatMessage(I18n.getString("gshop.listing.add.fail_no_item"));
                         return;
                     }
-                    if (hand != null && hand.itemID == lc.itemId && hand.getItemDamage() == lc.meta)
+                    if (hand != null && hand.itemID == lc.itemId && hand.getItemSubtype() == lc.meta)
                         ShopC2S.sendSellToBuyOrder(lc.listingId, 1, si);
                     else mc.thePlayer.addChatMessage(I18n.getString("gshop.listing.add.fail_no_item"));
                 } else {
