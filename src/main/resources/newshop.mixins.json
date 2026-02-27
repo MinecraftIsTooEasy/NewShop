@@ -1,0 +1,26 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.inf1nlty.newshop.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "world.EntityPlayerMixin",
+    "world.ItemMonsterPlacerMixin",
+    "world.ItemShopMixin",
+    "world.MinecraftServerMixin",
+    "world.WorldServerMixin"
+  ],
+  "client": [
+    "client.GameSettingsMixin",
+    "client.GUINewChatMixin",
+    "client.MinecraftMixin",
+    "client.SidebarPanelMixin",
+    "client.EmiShopPriceMixin",
+    "client.CreativePriceMixin",
+    "client.InventoryListingMixin",
+    "client.SlotHoverHintMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+	}
+}

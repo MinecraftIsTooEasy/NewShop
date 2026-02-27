@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "newshop",
+  "version": "${version}",
+  "depends": {
+    "fishmodloader": ">=3.3.2",
+    "rusted_iron_core": ">=1.5.0",
+    "emi": ">=1.1.20",
+    "pinin": ">=1.6.0"
+  },
+  "environment": "*",
+  "name": "New Shop",
+  "description": "Adds an in-game configurable item shop (GUI, paging, hotkey, buy/sell prices) for MITE",
+  "authors": [
+    "Inf1nlty"
+  ],
+  "contact": {
+    "homepage": "https://github.com/MinecraftIsTooEasy/NewShop",
+    "sources": "https://github.com/MinecraftIsTooEasy/NewShop"
+  },
+  "license": "MIT",
+  "icon": "assets/newshop/icon.png",
+  "entrypoints": {
+    "main": [
+      "com.inf1nlty.newshop.ShopMod"
+    ],
+    "modmenu": [
+      "com.inf1nlty.newshop.compat.ModMenuImpl"
+    ]
+},
+  "mixins": [
+    "newshop.mixins.json"
+  ],
+  "accessWidener": "newshop.accessWidener"
+}
