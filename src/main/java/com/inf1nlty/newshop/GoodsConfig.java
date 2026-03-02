@@ -227,14 +227,47 @@ public class GoodsConfig {
             if (dir != null && !dir.exists()) dir.mkdirs();
             if (!file.exists()) file.createNewFile();
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-                writer.write("# 系统商店配置文件，支持 id[:meta][|base64nbt] 或 minecraft:name[:meta] 格式；价格为一位小数 (buyPrice,sellPrice)\n");
-                writer.write("# System Shop Config: Supports id[:meta][|base64nbt] or minecraft:name[:meta] format; price is one decimal (buyPrice,sellPrice)\n");
-                writer.write("# id=buy,sell\n\n");
-                writer.write("# 1就是石头的ID，=号后面为出售价,回收价\n\n");
-                writer.write("# 1=1,1\n\n");
+                writer.write("# 系统商店配置文件，支持 id[:meta][|base64nbt] 格式；价格为一位小数 (buyPrice,sellPrice)\n");
+                writer.write("# System Shop Config: id[:meta][|base64nbt] format; price is one decimal (buyPrice,sellPrice)\n");
+                writer.write("# 格式说明: id[:meta]=buyPrice,sellPrice  价格为0表示不可购买/出售，取消注释并修改价格即可启用\n");
+                writer.write("# Format: id[:meta]=buyPrice,sellPrice  price=0 means not available; uncomment and set price to enable\n\n");
+                writeAllItemEntries(writer);
             }
         }
         catch (Exception ignored) {}
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void writeAllItemEntries(BufferedWriter writer) throws java.io.IOException {
+        Set<String> written = new LinkedHashSet<>();
+
+        for (Item item : Item.itemsList) {
+            if (item == null) continue;
+
+            List<ItemStack> subs;
+            try { subs = item.getSubItems(); } catch (Exception ignored) { subs = null; }
+            if (subs == null || subs.isEmpty()) {
+                subs = Collections.singletonList(new ItemStack(item, 1, 0));
+            }
+
+            boolean hasSubtypes = subs.size() > 1;
+
+            for (ItemStack stack : subs) {
+                if (stack == null) continue;
+                int meta;
+                try { meta = stack.getItemSubtype(); } catch (Exception ignored) { meta = stack.getItemDamage(); }
+
+                String key = meta == 0 ? String.valueOf(item.itemID) : (item.itemID + ":" + meta);
+                if (!written.add(key)) continue;
+
+                String displayName;
+                try { displayName = stack.getDisplayName(); } catch (Exception ignored) { displayName = null; }
+                if (displayName == null || displayName.isEmpty()) displayName = item.getUnlocalizedName();
+
+                writer.write("# " + displayName + "  ID:" + item.itemID + (hasSubtypes ? "  meta:" + meta : "") + "\n");
+                writer.write("# " + key + "=0.0,0.0\n\n");
+            }
+        }
     }
 
     public static int compositeKey(int id, int dmg) {
