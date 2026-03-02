@@ -8,10 +8,17 @@ The trading post provides player-to-player trading functionality. Players can pl
 
 The mailbox is used to store purchase orders, in case you are offline and unable to receive them.
 
+
 # 【New Shop】 v1.0.1
+
 
 * Fixed some bugs
 
 * Fixed to support all variant items, such as different colors of wool
 
 * Now supports adding items with NBT data to the system shop, such as enchanted tools.
+
+
+# 【New Shop】 v1.0.2
+
+* Iterate through all items and add them to newshop.cfg for easy searching and price modification.
