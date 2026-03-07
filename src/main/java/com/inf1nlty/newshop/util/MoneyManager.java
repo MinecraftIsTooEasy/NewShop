@@ -11,7 +11,7 @@ import java.util.WeakHashMap;
 import java.util.HashMap;
 import java.util.UUID;
 
-/** In-memory balances in tenths, persisted via EntityPlayerMixin (shop_money) and shop_balances.dat.
+/** In-memory balances in hundredths, persisted via EntityPlayerMixin (shop_money) and shop_balances.dat.
  *
  * <p>Can also be instantiated as a per-player wrapper (used by {@link ShopPlayer#newShop$getMoneyManager})
  * to provide an instance-based API
@@ -50,28 +50,28 @@ public class MoneyManager {
         this.instancePlayer = null;
     }
 
-    /** Returns the player's balance as a double (converted from internal tenths). */
+    /** Returns the player's balance as a double (converted from internal hundredths). */
     public double getMoney() {
-        return getBalanceTenths(instancePlayer) / 10.0;
+        return getBalanceTenths(instancePlayer) / 100.0;
     }
 
-    /** Sets the player's balance (converted to internal tenths). */
+    /** Sets the player's balance (converted to internal hundredths). */
     public void setMoney(double money) {
-        int tenths = toTenths(money);
-        setBalanceTenths(instancePlayer, tenths);
+        int hundredths = toHundredths(money);
+        setBalanceTenths(instancePlayer, hundredths);
         if (instancePlayer != null) {
-            setBalanceTenths(PlayerIdentityUtil.getOfflineUUID(instancePlayer.username), tenths);
+            setBalanceTenths(PlayerIdentityUtil.getOfflineUUID(instancePlayer.username), hundredths);
         }
     }
 
     /** Adds {@code money} to the player's balance. */
     public void addMoney(double money) {
-        addTenths(instancePlayer, toTenths(money));
+        addTenths(instancePlayer, toHundredths(money));
     }
 
     /** Subtracts {@code money} from the player's balance. */
     public void subMoney(double money) {
-        addTenths(instancePlayer, -toTenths(money));
+        addTenths(instancePlayer, -toHundredths(money));
     }
 
     public void addMoneyWithSimplify(double money) {
@@ -105,8 +105,8 @@ public class MoneyManager {
         );
     }
 
-    private static int toTenths(double d) {
-        return (int) Math.round(d * 10.0);
+    private static int toHundredths(double d) {
+        return (int) Math.round(d * 100.0);
     }
 
     public static int getBalanceTenths(EntityPlayer player) {

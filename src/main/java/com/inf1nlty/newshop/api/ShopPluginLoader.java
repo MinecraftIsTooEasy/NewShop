@@ -85,7 +85,7 @@ public final class ShopPluginLoader {
         }
 
         private static int toTenths(double price) {
-            return (int) Math.round(price * 10.0);
+            return (int) Math.round(price * 100.0);
         }
     }
 }

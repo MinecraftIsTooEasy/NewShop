@@ -3,6 +3,7 @@ package com.inf1nlty.newshop.util;
 import me.towdium.pinin.PinyinMatch;
 import net.minecraft.I18n;
 import net.minecraft.Minecraft;
+import net.xiaoyu233.fml.FishModLoader;
 
 /** Search helper: zh_CN uses pinyin matching, other locales use case-insensitive substring. */
 public final class SearchHelper {
@@ -16,7 +17,7 @@ public final class SearchHelper {
 
         if (text == null || text.isEmpty()) return false;
 
-        return isChineseLocale()
+        return isChineseLocale() && FishModLoader.hasMod("pinin")
                 ? PinyinMatch.contains(text, query)
                 : text.toLowerCase().contains(query.toLowerCase());
     }

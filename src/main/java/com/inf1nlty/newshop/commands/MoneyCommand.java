@@ -43,7 +43,7 @@ public class MoneyCommand extends CommandBase {
         if (args.length == 1)
         {
             if (!isOp) { player.sendChatToPlayer(ChatMessageComponent.createFromTranslationKey("shop.money.set.no_permission").setColor(EnumChatFormatting.RED)); return; }
-            if (!args[0].trim().matches("-?\\d+(\\.\\d)?")) { player.sendChatToPlayer(ChatMessageComponent.createFromTranslationKey("shop.money.set.invalid").setColor(EnumChatFormatting.RED)); return; }
+            if (!args[0].trim().matches("-?\\d+(\\.\\d{1,2})?")) { player.sendChatToPlayer(ChatMessageComponent.createFromTranslationKey("shop.money.set.invalid").setColor(EnumChatFormatting.RED)); return; }
 
             int tenths = parseTenths(args[0]);
             MoneyManager.setBalanceTenths(player, tenths);
@@ -58,7 +58,7 @@ public class MoneyCommand extends CommandBase {
 
             EntityPlayer target = MinecraftServer.getServer().getConfigurationManager().getPlayerForUsername(args[0]);
             if (target == null) { player.sendChatToPlayer(ChatMessageComponent.createFromTranslationWithSubstitutions("shop.money.set.not_found", args[0]).setColor(EnumChatFormatting.RED)); return; }
-            if (!args[1].trim().matches("-?\\d+(\\.\\d)?")) { player.sendChatToPlayer(ChatMessageComponent.createFromTranslationKey("shop.money.set.invalid").setColor(EnumChatFormatting.RED)); return; }
+            if (!args[1].trim().matches("-?\\d+(\\.\\d{1,2})?")) { player.sendChatToPlayer(ChatMessageComponent.createFromTranslationKey("shop.money.set.invalid").setColor(EnumChatFormatting.RED)); return; }
 
             int tenths = parseTenths(args[1]);
             MoneyManager.setBalanceTenths(target, tenths);
@@ -78,10 +78,11 @@ public class MoneyCommand extends CommandBase {
         {
             String[] parts = raw.split("\\.");
             int whole = Integer.parseInt(parts[0]);
-            int frac  = Integer.parseInt(parts[1].length() > 1 ? parts[1].substring(0, 1) : parts[1]);
-            return whole < 0 ? whole * 10 - frac : whole * 10 + frac;
+            String fracStr = (parts[1] + "0").substring(0, 2);
+            int frac = Integer.parseInt(fracStr);
+            return whole < 0 ? whole * 100 - frac : whole * 100 + frac;
         }
-        return Integer.parseInt(raw) * 10;
+        return Integer.parseInt(raw) * 100;
     }
 
 }

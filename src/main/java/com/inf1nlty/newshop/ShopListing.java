@@ -38,9 +38,9 @@ public class ShopListing {
     }
 
     public static String formatTenths(int t) {
-        int w = t / 10;
-        int f = Math.abs(t % 10);
-        return w + "." + f;
+        int w = t / 100;
+        int f = Math.abs(t % 100);
+        return w + "." + String.format("%02d", f);
     }
 
     /** Strips shop-internal price tags from an NBT compound, returning null if nothing remains. */

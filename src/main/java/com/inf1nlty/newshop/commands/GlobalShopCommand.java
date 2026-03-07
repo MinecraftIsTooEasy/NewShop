@@ -50,7 +50,7 @@ public class GlobalShopCommand extends CommandBase {
         ItemStack hand = player.inventory.getCurrentItemStack();
         if (hand == null) { ShopS2C.sendResult(player, "gshop.listing.add.fail_no_item"); return; }
 
-        if (!args[1].matches("-?\\d+(\\.\\d)?")) { ShopS2C.sendResult(player, "gshop.listing.add.fail_price"); return; }
+        if (!args[1].matches("-?\\d+(\\.\\d{1,2})?")) { ShopS2C.sendResult(player, "gshop.listing.add.fail_price"); return; }
         int priceTenths = parseTenths(args[1]);
         if (priceTenths <= 0) { ShopS2C.sendResult(player, "gshop.listing.add.fail_price"); return; }
 
@@ -94,7 +94,7 @@ public class GlobalShopCommand extends CommandBase {
             itemId = Integer.parseInt(idMeta);
         }
 
-        if (!args[2].matches("-?\\d+(\\.\\d)?")) { ShopS2C.sendResult(player, "gshop.buy.usage"); return; }
+        if (!args[2].matches("-?\\d+(\\.\\d{1,2})?")) { ShopS2C.sendResult(player, "gshop.buy.usage"); return; }
         int priceTenths = parseTenths(args[2]);
         if (priceTenths <= 0) { ShopS2C.sendResult(player, "gshop.buy.usage"); return; }
 
@@ -194,17 +194,14 @@ public class GlobalShopCommand extends CommandBase {
 
             if (parts.length != 2) throw new NumberFormatException();
 
-            int whole   = Integer.parseInt(parts[0]);
+            int whole = Integer.parseInt(parts[0]);
 
-            String fracStr = parts[1];
-
-            if (fracStr.length() > 1) fracStr = fracStr.substring(0, 1);
-
+            String fracStr = (parts[1] + "0").substring(0, 2);
             int frac = Integer.parseInt(fracStr);
 
-            return whole < 0 ? whole * 10 - frac : whole * 10 + frac;
+            return whole < 0 ? whole * 100 - frac : whole * 100 + frac;
         }
 
-        return Integer.parseInt(raw) * 10;
+        return Integer.parseInt(raw) * 100;
     }
 }

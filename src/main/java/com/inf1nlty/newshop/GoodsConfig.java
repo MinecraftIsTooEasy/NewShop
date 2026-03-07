@@ -18,6 +18,7 @@ import java.util.Base64;
  * <pre>
  *   id[:meta][|base64nbt] = buyPrice,sellPrice
  * </pre>
+ * Prices support up to two decimal places (e.g. {@code 1.25}).
  * Items without gameplay NBT use the fast {@code int} composite key.
  * Items WITH NBT (enchanted books, gear, …) use a secondary {@code String} map
  * keyed by {@code "id:meta:base64nbt"} so they don't collide with plain items.
@@ -164,14 +165,16 @@ public class GoodsConfig {
 
     private static Integer parsePriceTenths(String raw) {
         raw = raw.trim();
-        if (!raw.matches("-?\\d+(\\.\\d)?")) return null;
+        if (!raw.matches("-?\\d+(\\.\\d{1,2})?")) return null;
         if (raw.contains(".")) {
             String[] parts = raw.split("\\.");
             int whole = Integer.parseInt(parts[0]);
-            int frac  = Integer.parseInt(parts[1]);
-            return whole < 0 ? whole * 10 - frac : whole * 10 + frac;
+            // Pad or truncate fraction to exactly 2 digits
+            String fracStr = (parts[1] + "0").substring(0, 2);
+            int frac = Integer.parseInt(fracStr);
+            return whole < 0 ? whole * 100 - frac : whole * 100 + frac;
         }
-        return Integer.parseInt(raw) * 10;
+        return Integer.parseInt(raw) * 100;
     }
 
     private static class IdMeta { int id = -1; int meta = 0; }
@@ -227,8 +230,8 @@ public class GoodsConfig {
             if (dir != null && !dir.exists()) dir.mkdirs();
             if (!file.exists()) file.createNewFile();
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-                writer.write("# 系统商店配置文件，支持 id[:meta][|base64nbt] 格式；价格为一位小数 (buyPrice,sellPrice)\n");
-                writer.write("# System Shop Config: id[:meta][|base64nbt] format; price is one decimal (buyPrice,sellPrice)\n");
+                writer.write("# 系统商店配置文件，支持 id[:meta][|base64nbt] 格式；价格支持两位小数 (buyPrice,sellPrice)\n");
+                writer.write("# System Shop Config: id[:meta][|base64nbt] format; price supports two decimal places (buyPrice,sellPrice)\n");
                 writer.write("# 格式说明: id[:meta]=buyPrice,sellPrice  价格为0表示不可购买/出售，取消注释并修改价格即可启用\n");
                 writer.write("# Format: id[:meta]=buyPrice,sellPrice  price=0 means not available; uncomment and set price to enable\n\n");
                 writeAllItemEntries(writer);
@@ -265,7 +268,7 @@ public class GoodsConfig {
                 if (displayName == null || displayName.isEmpty()) displayName = item.getUnlocalizedName();
 
                 writer.write("# " + displayName + "  ID:" + item.itemID + (hasSubtypes ? "  meta:" + meta : "") + "\n");
-                writer.write("# " + key + "=0.0,0.0\n\n");
+                writer.write("# " + key + "=0.00,0.00\n\n");
             }
         }
     }
@@ -368,7 +371,7 @@ public class GoodsConfig {
         savePrice(itemID, meta, buyTenths, sellTenths, null);
     }
 
-    private static String formatTenths(int tenths) {
-        return (tenths / 10) + "." + Math.abs(tenths % 10);
+    private static String formatTenths(int hundredths) {
+        return (hundredths / 100) + "." + String.format("%02d", Math.abs(hundredths % 100));
     }
 }

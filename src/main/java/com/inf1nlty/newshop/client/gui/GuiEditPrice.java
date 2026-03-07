@@ -152,7 +152,7 @@ public class GuiEditPrice extends GuiScreen {
     {
         String text = field.getText().trim();
         if (text.isEmpty()) return 0;
-        try { return (int) Math.round(Double.parseDouble(text) * 10.0); }
+        try { return (int) Math.round(Double.parseDouble(text) * 100.0); }
         catch (NumberFormatException ignored) { return 0; }
     }
 }

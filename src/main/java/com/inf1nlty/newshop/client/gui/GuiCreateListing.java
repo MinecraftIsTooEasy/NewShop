@@ -197,7 +197,7 @@ public class GuiCreateListing extends GuiScreen {
     private static int parseTenths(GuiTextField field) {
         try {
             double v = Double.parseDouble(field.getText().trim());
-            return (int) Math.round(v * 10.0);
+            return (int) Math.round(v * 100.0);
         } catch (NumberFormatException e) {
             return 0;
         }
