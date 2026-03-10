@@ -16,9 +16,12 @@ import java.util.Base64;
  *
  * <p>Config line format:
  * <pre>
- *   id[:meta][|base64nbt] = buyPrice,sellPrice
+ *   modid:name[:meta][|base64nbt] = buyPrice,sellPrice
  * </pre>
- * Prices support up to two decimal places (e.g. {@code 1.25}).
+ * Vanilla items use {@code minecraft} as the modid (e.g. {@code minecraft:swordIron=10.00,5.00}).
+ * Mod items use their own modid (e.g. {@code mymod:myItem=5.00,2.50}).
+ * The legacy numeric-ID format ({@code 256=10.00,5.00}) is still accepted for backward compatibility.
+ * Prices support up to two decimal places.  A price of {@code 0,0} means the entry is disabled.
  * Items without gameplay NBT use the fast {@code int} composite key.
  * Items WITH NBT (enchanted books, gear, …) use a secondary {@code String} map
  * keyed by {@code "id:meta:base64nbt"} so they don't collide with plain items.
@@ -114,6 +117,9 @@ public class GoodsConfig {
                 Integer buy     = parsePriceTenths(buyRaw);
                 Integer sell    = parsePriceTenths(sellRaw);
                 if (buy == null || sell == null) continue;
+                // Skip zero-price entries — they mark items as "not available" in the shop.
+                // This also ensures plugin-registered items are never shadowed by a 0,0 cfg line.
+                if (buy == 0 && sell == 0) continue;
 
                 Item base = Item.itemsList[parsed.id];
                 if (base == null) continue;
@@ -230,10 +236,15 @@ public class GoodsConfig {
             if (dir != null && !dir.exists()) dir.mkdirs();
             if (!file.exists()) file.createNewFile();
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-                writer.write("# 系统商店配置文件，支持 id[:meta][|base64nbt] 格式；价格支持两位小数 (buyPrice,sellPrice)\n");
-                writer.write("# System Shop Config: id[:meta][|base64nbt] format; price supports two decimal places (buyPrice,sellPrice)\n");
-                writer.write("# 格式说明: id[:meta]=buyPrice,sellPrice  价格为0表示不可购买/出售，取消注释并修改价格即可启用\n");
-                writer.write("# Format: id[:meta]=buyPrice,sellPrice  price=0 means not available; uncomment and set price to enable\n\n");
+                writer.write("# 系统商店配置文件\n");
+                writer.write("# System Shop Config\n");
+                writer.write("# 格式: modid:name[:meta][|base64nbt]=buyPrice,sellPrice  (价格支持两位小数)\n");
+                writer.write("# Format: modid:name[:meta][|base64nbt]=buyPrice,sellPrice  (price supports two decimal places)\n");
+                writer.write("# 原版物品 modid 为 minecraft，例如: minecraft:swordIron=10.00,5.00\n");
+                writer.write("# Vanilla items use modid 'minecraft', e.g.: minecraft:swordIron=10.00,5.00\n");
+                writer.write("# 价格 0,0 表示不启用，修改价格即可启用 / price 0,0 = disabled; change price to enable\n");
+                writer.write("# 向后兼容: 支持纯数字 ID 格式 (e.g. 256=10.00,5.00)\n");
+                writer.write("# Backward compat: legacy numeric-ID format still works (e.g. 256=10.00,5.00)\n\n");
                 writeAllItemEntries(writer);
             }
         }
@@ -255,22 +266,50 @@ public class GoodsConfig {
 
             boolean hasSubtypes = subs.size() > 1;
 
+            String nsBase = itemToNamespaceKey(item);
+
             for (ItemStack stack : subs) {
                 if (stack == null) continue;
                 int meta;
                 try { meta = stack.getItemSubtype(); } catch (Exception ignored) { meta = stack.getItemDamage(); }
 
-                String key = meta == 0 ? String.valueOf(item.itemID) : (item.itemID + ":" + meta);
+                String key = meta == 0 ? nsBase : (nsBase + ":" + meta);
                 if (!written.add(key)) continue;
 
                 String displayName;
                 try { displayName = stack.getDisplayName(); } catch (Exception ignored) { displayName = null; }
                 if (displayName == null || displayName.isEmpty()) displayName = item.getUnlocalizedName();
 
-                writer.write("# " + displayName + "  ID:" + item.itemID + (hasSubtypes ? "  meta:" + meta : "") + "\n");
-                writer.write("# " + key + "=0.00,0.00\n\n");
+                writer.write("# " + displayName + (hasSubtypes ? "  meta:" + meta : "") + "\n");
+                writer.write(key + "=0.00,0.00\n\n");
             }
         }
+    }
+
+    /**
+     * Derives a stable {@code modid:name} key from an Item's unlocalized name.
+     * <ul>
+     *   <li>Vanilla items (unlocalized = {@code item.swordIron}) → {@code minecraft:swordIron}</li>
+     *   <li>Mod items    (unlocalized = {@code item.modid.itemName}) → {@code modid:itemName}</li>
+     * </ul>
+     * Falls back to the numeric ID if the unlocalized name is absent.
+     */
+    static String itemToNamespaceKey(Item item) {
+        String unlocalized = item.getUnlocalizedName();
+        if (unlocalized == null || unlocalized.isEmpty()) return String.valueOf(item.itemID);
+
+        // Strip leading "item." / "tile." prefix that MITE always adds
+        String trimmed = unlocalized;
+        if (trimmed.startsWith("item."))  trimmed = trimmed.substring(5);
+        else if (trimmed.startsWith("tile.")) trimmed = trimmed.substring(5);
+
+        // If there is still a dot, the part before it is the modid
+        int dot = trimmed.indexOf('.');
+        if (dot > 0) {
+            return trimmed.substring(0, dot) + ":" + trimmed.substring(dot + 1);
+        }
+        // No dot → vanilla item
+        return "minecraft:" + trimmed;
     }
 
     public static int compositeKey(int id, int dmg) {
@@ -291,7 +330,14 @@ public class GoodsConfig {
         File file = new File("config/newshop.cfg");
         if (!file.exists()) generateDefault(file);
 
-        String nbtB64  = "";
+        Item base = Item.itemsList[itemID];
+
+        // Build the namespace key (e.g. "minecraft:swordIron") for writing;
+        // keep the legacy numeric key around so we can upgrade old lines in-place.
+        String nsBase    = (base != null) ? itemToNamespaceKey(base) : String.valueOf(itemID);
+        String numBase   = (meta == 0 ? String.valueOf(itemID) : (itemID + ":" + meta));
+
+        String nbtB64 = "";
         if (nbt != null) {
             try {
                 ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -299,8 +345,10 @@ public class GoodsConfig {
                 nbtB64 = "|" + Base64.getUrlEncoder().withoutPadding().encodeToString(bos.toByteArray());
             } catch (Exception ignored) {}
         }
-        String key     = (meta == 0 ? String.valueOf(itemID) : (itemID + ":" + meta)) + nbtB64;
-        String newLine = key + "=" + formatTenths(buyTenths) + "," + formatTenths(sellTenths);
+
+        String nsKey  = (meta == 0 ? nsBase  : (nsBase  + ":" + meta)) + nbtB64;
+        String numKey = numBase + nbtB64;
+        String newLine = nsKey + "=" + formatTenths(buyTenths) + "," + formatTenths(sellTenths);
 
         try {
             List<String> lines = new ArrayList<>();
@@ -311,10 +359,14 @@ public class GoodsConfig {
                     String trimmed = line.trim();
                     if (!trimmed.startsWith("#") && !trimmed.isEmpty()) {
                         String[] parts = trimmed.split("=", 2);
-                        if (parts.length >= 2 && parts[0].trim().equals(key)) {
-                            lines.add(newLine);
-                            found = true;
-                            continue;
+                        if (parts.length >= 2) {
+                            String existingKey = parts[0].trim();
+                            // Match both the new namespace key and the old numeric key
+                            if (existingKey.equals(nsKey) || existingKey.equals(numKey)) {
+                                lines.add(newLine);
+                                found = true;
+                                continue;
+                            }
                         }
                     }
                     lines.add(line);
@@ -327,7 +379,6 @@ public class GoodsConfig {
         }
         catch (Exception ignored) {}
 
-        Item base = Item.itemsList[itemID];
         if (base == null) return;
 
         ShopListing shopItem     = new ShopListing();

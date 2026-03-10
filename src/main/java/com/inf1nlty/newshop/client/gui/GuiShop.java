@@ -369,12 +369,12 @@ public class GuiShop extends GuiContainer {
             }
         }
         if (ShopClientData.inShop) {
-            for (SystemShopClientCatalog.Entry e : viewEntries) {
-                if (e.itemID == stack.itemID && e.meta == stack.getItemSubtype() && nbtMatchesEntry(e, stack)) {
-                    tip.add("§e" + I18n.getString("shop.price")     + ": §f" + Money.format(e.buyTenths));
-                    tip.add("§a" + I18n.getString("shop.sellprice") + ": §f" + Money.format(e.sellTenths));
+            for (SystemShopClientCatalog.Entry entry : viewEntries) {
+                if (entry.itemID == stack.itemID && entry.meta == stack.getItemSubtype() && nbtMatchesEntry(entry, stack)) {
+                    tip.add("§e" + I18n.getString("shop.price")     + ": §f" + Money.format(entry.buyTenths));
+                    tip.add("§a" + I18n.getString("shop.sellprice") + ": §f" + Money.format(entry.sellTenths));
                     if (mc.thePlayer.capabilities.isCreativeMode)
-                        tip.add("§7" + I18n.getString("shop.editPrice.hint"));
+                        tip.add("§e" + I18n.getString("shop.editPrice.hint"));
                     break;
                 }
             }
