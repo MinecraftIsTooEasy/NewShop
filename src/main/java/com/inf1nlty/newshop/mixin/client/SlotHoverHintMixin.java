@@ -44,8 +44,9 @@ public abstract class SlotHoverHintMixin extends GuiScreen
                 {
                     List<String> hints = new ArrayList<>();
 
-                    hints.add("§7" + I18n.getString("shop.hint.altleft.editprice"));
-                    hints.add("§7" + I18n.getString("shop.hint.altright.list"));
+                    hints.add("§a" + I18n.getString("shop.hint.altleft.list"));
+                    hints.add("§b" + I18n.getString("shop.hint.altright.list"));
+                    hints.add("§e" + I18n.getString("shop.hint.altleft.editprice"));
                     func_102021_a(hints, mouseX, mouseY);
                     return;
                 }
@@ -57,10 +58,12 @@ public abstract class SlotHoverHintMixin extends GuiScreen
 
         List<String> hints = new ArrayList<>();
 
-        if (isOp)
-            hints.add("§7" + I18n.getString("shop.hint.altleft.editprice"));
+        hints.add("§a" + I18n.getString("shop.hint.altleft.list"));
+        hints.add("§b" + I18n.getString("shop.hint.altright.list"));
 
-        hints.add("§7" + I18n.getString("shop.hint.altright.list"));
+        if (isOp)
+            hints.add("§e" + I18n.getString("shop.hint.altleft.editprice"));
+
 
         func_102021_a(hints, mouseX, mouseY);
     }

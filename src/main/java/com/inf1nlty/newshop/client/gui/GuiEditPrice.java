@@ -103,11 +103,12 @@ public class GuiEditPrice extends GuiScreen {
     {
         drawDefaultBackground();
         drawCenteredString(fontRenderer, I18n.getStringParams("shop.editPrice.title", editStack.getDisplayName()), width / 2, 15, 0xFFFFFF);
-        drawString(fontRenderer, I18n.getString("shop.editPrice.buyPrice"),  width / 2 - 100, height / 2 - 30, 0x404040);
-        drawString(fontRenderer, I18n.getString("shop.editPrice.soldPrice"), width / 2 - 100, height / 2 + 10, 0x404040);
+        drawString(fontRenderer, I18n.getString("shop.editPrice.buyPrice"),  width / 2 - 100, height / 2 - 30, 0x34DB34);
+        drawString(fontRenderer, I18n.getString("shop.editPrice.soldPrice"), width / 2 - 100, height / 2 + 10, 0x34DB34);
         buyPriceField.drawTextBox();
         sellPriceField.drawTextBox();
         renderItemPreview();
+
         super.drawScreen(mouseX, mouseY, partial);
     }
 

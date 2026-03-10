@@ -10,14 +10,15 @@ import java.io.ByteArrayOutputStream;
 
 /**
  * GUI to create a global marketplace listing from the player's inventory.
- * Opened by Alt+Right-Click on an inventory slot. Allows the player to set
- * a sell price and quantity (<= held amount). Sends a C2SGlobalListPacket.
+ * Opened by Alt+Click on an inventory slot. Allows the player to set
+ * a price and quantity. Sends a C2SListFromSlotPacket (sell) or
+ * C2SGlobalListPacket (buy order, no item deduction).
  */
 public class GuiCreateListing extends GuiScreen {
 
     private static final RenderItem ITEM_RENDERER = new RenderItem();
 
-    private final ItemStack editStack; // original stack (may have full count)
+    private final ItemStack editStack;
     private final GuiScreen parentScreen;
     private final int slotIndex;
     /** windowId of the open container; -1 if coming from player inventory. */
@@ -25,30 +26,38 @@ public class GuiCreateListing extends GuiScreen {
     private final boolean fromContainer;
     /** True when the player is in creative/OP mode — no inventory check on server. */
     private final boolean creative;
+    /** True when posting a buy order (no item deduction); false for a sell listing. */
+    private final boolean isBuyOrder;
 
     private GuiTextField priceField;
     private GuiTextField amountField;
 
     private static final int BTN_DONE = 1;
 
-    /** Player inventory slot constructor (backward compatible). */
+    /** Sell listing — backward-compatible single-slot constructor. */
     public GuiCreateListing(GuiScreen parent, ItemStack editStack, int slotIndex) {
-        this(parent, editStack, slotIndex, -1, false, false);
+        this(parent, editStack, slotIndex, -1, false, false, false);
     }
 
-    /** Full constructor for both player-inventory and external-container slots. */
+    /** Sell listing from an external container slot. */
     public GuiCreateListing(GuiScreen parent, ItemStack editStack, int slotIndex, int windowId, boolean fromContainer) {
-        this(parent, editStack, slotIndex, windowId, fromContainer, false);
+        this(parent, editStack, slotIndex, windowId, fromContainer, false, false);
     }
 
-    /** Full constructor including creative/OP bypass flag. */
+    /** Sell listing with creative flag. */
     public GuiCreateListing(GuiScreen parent, ItemStack editStack, int slotIndex, int windowId, boolean fromContainer, boolean creative) {
+        this(parent, editStack, slotIndex, windowId, fromContainer, creative, false);
+    }
+
+    /** Full constructor. */
+    public GuiCreateListing(GuiScreen parent, ItemStack editStack, int slotIndex, int windowId, boolean fromContainer, boolean creative, boolean isBuyOrder) {
         this.parentScreen  = parent;
         this.editStack     = editStack;
         this.slotIndex     = slotIndex;
         this.windowId      = windowId;
         this.fromContainer = fromContainer;
         this.creative      = creative;
+        this.isBuyOrder    = isBuyOrder;
     }
 
     @Override
@@ -64,15 +73,14 @@ public class GuiCreateListing extends GuiScreen {
         int doneButtonY = sellY + 30;
         buttonList.add(new GuiButton(BTN_DONE, centerX - 100, doneButtonY, I18n.getString("gui.done")));
 
-        // Price field
         priceField = new GuiTextField(fontRenderer, centerX - 100, buyY, 200, 20);
         priceField.setMaxStringLength(16);
         priceField.setText("0.");
 
-        // Amount field — creative/OP can list any positive amount freely
         amountField = new GuiTextField(fontRenderer, centerX - 100, sellY, 200, 20);
         amountField.setMaxStringLength(8);
-        amountField.setText(creative ? "1" : String.valueOf(editStack.stackSize));
+        // Buy order: user enters desired quantity freely; creative sell: default 1; normal sell: held count
+        amountField.setText(isBuyOrder ? "1" : (creative ? "1" : String.valueOf(editStack.stackSize)));
 
         updateButtons();
     }
@@ -99,19 +107,14 @@ public class GuiCreateListing extends GuiScreen {
             } catch (NumberFormatException e) {
                 amount = -1;
             }
-            if (priceTenths <= 0) {
-                return;
-            }
-            if (amount <= 0) {
-                return;
-            }
-            // Non-creative players cannot list more than they hold
-            if (!creative && amount > editStack.stackSize) {
-                return;
-            }
+            if (priceTenths <= 0) return;
+            if (amount <= 0) return;
+            if (!creative && !isBuyOrder && amount > editStack.stackSize) return;
 
-            // Use dedicated packet to list from slot so server will deduct items from that slot
-            if (fromContainer) {
+            if (isBuyOrder) {
+                // Buy order: no item deduction; server identifies it by a negative priceTenths value
+                ShopC2S.sendGlobalList(editStack.itemID, editStack.getItemSubtype(), amount, -priceTenths);
+            } else if (fromContainer) {
                 ShopC2S.sendGlobalListFromContainerSlot(editStack.itemID, editStack.getItemDamage(), amount, this.slotIndex, priceTenths, this.windowId, creative);
             } else {
                 // For creative/template listings (slotIndex == -1), compress the item's full NBT
@@ -149,19 +152,41 @@ public class GuiCreateListing extends GuiScreen {
     }
 
     @Override
-    public void drawScreen(int mouseX, int mouseY, float partial) {
+    public void drawScreen(int mouseX, int mouseY, float partial)
+    {
         drawDefaultBackground();
-        String title = I18n.getStringParams("gshop.listing.add.title", editStack.getDisplayName());
-        drawCenteredString(fontRenderer, title, width / 2, 15, 0xFFFFFF);
 
-        drawString(fontRenderer, I18n.getString("gshop.listing.add.price"), width / 2 - 100, height / 2 - 30, 0x404040);
-        String amountKey = creative ? "gshop.listing.add.amount.creative" : "gshop.listing.add.amount";
-        drawString(fontRenderer, I18n.getString(amountKey), width / 2 - 100, height / 2 + 10, creative ? 0x55AAFF : 0x404040);
+        String titleKey = isBuyOrder ? "gshop.buyorder.add.title" : "gshop.listing.add.title";
+        String title = I18n.getStringParams(titleKey, editStack.getDisplayName());
+        drawCenteredString(fontRenderer, title, width / 2, 15, isBuyOrder ? 0x6034DB34 : 0xFFFFFF);
 
+        String priceKey = isBuyOrder ? "gshop.buyorder.add.price" : "gshop.listing.add.price";
+        drawString(fontRenderer, I18n.getString(priceKey), width / 2 - 100, height / 2 - 30, 0x34DB34);
+
+        String amountKey;
+        int amountColor;
+
+        if (isBuyOrder)
+        {
+            amountKey   = "gshop.buyorder.add.amount";
+            amountColor = 0x34DB34;
+        }
+        else if (creative)
+        {
+            amountKey   = "gshop.listing.add.amount.creative";
+            amountColor = 0x55AAFF;
+        }
+        else
+        {
+            amountKey   = "gshop.listing.add.amount";
+            amountColor = 0x34DB34;
+        }
+
+        drawString(fontRenderer, I18n.getString(amountKey), width / 2 - 100, height / 2 + 10, amountColor);
         priceField.drawTextBox();
         amountField.drawTextBox();
-
         renderItemPreview();
+
         super.drawScreen(mouseX, mouseY, partial);
     }
 
