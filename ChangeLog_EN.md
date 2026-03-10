@@ -1,5 +1,12 @@
 # 【New Shop】
 
+# v1.0.4
+
+* Fixed the issue of equipment durability display synchronization when opening the shop interface.
+* Added the function to quickly list acquisition orders.
+* Now enumerate all items by namespace.
+
+
 # v1.0.3
 * Support for fractional pricing\
 * Pinin MOD is no longer mandatory
