@@ -181,13 +181,14 @@ public class ShopS2C
         for (GlobalListing listing : listings)
         {
             GlobalListingClient clientListing = new GlobalListingClient();
-            clientListing.listingId    = listing.listingId;
-            clientListing.itemId       = listing.itemId;
-            clientListing.meta         = listing.meta;
-            clientListing.amount       = listing.amount;
-            clientListing.priceTenths  = listing.priceTenths;
-            clientListing.owner        = listing.ownerName;
-            clientListing.isBuyOrder   = listing.isBuyOrder;
+            clientListing.listingId = listing.listingId;
+            clientListing.itemId = listing.itemId;
+            clientListing.meta = listing.meta;
+            clientListing.damage = listing.damage;
+            clientListing.amount = listing.amount;
+            clientListing.priceTenths = listing.priceTenths;
+            clientListing.owner = listing.ownerName;
+            clientListing.isBuyOrder = listing.isBuyOrder;
             if (listing.nbt != null) clientListing.nbtCompressed = compressNBT(listing.nbt);
             clientListings.add(clientListing);
         }
@@ -222,7 +223,7 @@ public class ShopS2C
         Item item = (gl.itemId >= 0 && gl.itemId < Item.itemsList.length) ? Item.itemsList[gl.itemId] : null;
         if (item == null) { sendResult(buyer, "gshop.buy.not_found"); return; }
 
-        ItemStack testStack = buildStack(item, tentativeCount, gl.meta, gl.nbt);
+        ItemStack testStack = buildStack(item, tentativeCount, gl.meta, gl.damage, gl.nbt);
         if (!canFit(buyer, testStack)) { sendResult(buyer, "gshop.inventory.full"); return; }
 
         int bought = GlobalShopData.buy(listingId, tentativeCount);
@@ -231,7 +232,7 @@ public class ShopS2C
         int finalCost = gl.priceTenths * bought;
         if (MoneyManager.getBalanceTenths(buyer) < finalCost) { sendResult(buyer, "gshop.buy.not_enough_money"); return; }
 
-        ItemStack deliver = buildStack(item, bought, gl.meta, gl.nbt);
+        ItemStack deliver = buildStack(item, bought, gl.meta, gl.damage, gl.nbt);
 
         buyer.inventory.addItemStackToInventory(deliver);
         MoneyManager.addTenths(buyer, -finalCost);
@@ -344,7 +345,7 @@ public class ShopS2C
         while (remaining > 0)
         {
             int take = Math.min(maxStack, remaining);
-            ItemStack stack = buildStack(item, take, removed.meta, removed.nbt);
+            ItemStack stack = buildStack(item, take, removed.meta, removed.damage, removed.nbt);
 
             if (!canFit(player, stack))
             {
@@ -417,7 +418,7 @@ public class ShopS2C
         stack.stackSize -= give;
         if (stack.stackSize <= 0) seller.inventory.mainInventory[slotIndex] = null;
 
-        ItemStack deliver = buildStack(stack.getItem(), give, stack.getItemSubtype(), stack.stackTagCompound);
+        ItemStack deliver = buildStack(stack.getItem(), give, stack.getItemSubtype(), stack.getItemDamage(), stack.stackTagCompound);
         MailboxManager.deliver(buyerId, deliver);
 
         ServerPlayer onlineBuyer = null;
@@ -491,6 +492,7 @@ public class ShopS2C
         }
 
         int trueMeta = nbtSource.getItemSubtype();
+        int trueDamage = nbtSource.getItemDamage();
         int removed;
 
         if (opBypass) {
@@ -504,7 +506,7 @@ public class ShopS2C
         if (listing == null)
         {
             if (!opBypass) {
-                ItemStack refund = buildStack(Item.itemsList[itemId], removed, trueMeta, nbtSource.stackTagCompound);
+                ItemStack refund = buildStack(Item.itemsList[itemId], removed, trueMeta, trueDamage, nbtSource.stackTagCompound);
                 if (!player.inventory.addItemStackToInventory(refund)) player.dropPlayerItem(refund);
             }
             sendResult(player, "gshop.listing.add.fail_cap");
@@ -547,7 +549,8 @@ public class ShopS2C
         int trueMeta = slotStack.getItemSubtype();
         ItemStack nbtSource = slotStack.copy();
 
-        if (!opBypass) {
+        if (!opBypass)
+        {
             boolean wasNulled = slotStack.stackSize == amount;
             slotStack.stackSize -= amount;
             if (slotStack.stackSize <= 0) containerSlot.putStack(null);
@@ -570,10 +573,14 @@ public class ShopS2C
             sendResult(player, "gshop.listing.add.success|itemID=" + itemId + "|meta=" + trueMeta + "|count=" + listing.amount + "|price=" + Money.format(listing.priceTenths));
             broadcastGlobalSnapshot();
             syncInventory(player);
-        } else {
+        }
+        else
+        {
             // OP/creative bypass — list without touching the container
             GlobalListing listing = GlobalShopData.addSellOrder(player, itemId, trueMeta, amount, priceTenths, nbtSource);
-            if (listing == null) { sendResult(player, "gshop.listing.add.fail_cap"); return; }
+            if (listing == null) {
+                sendResult(player, "gshop.listing.add.fail_cap"); return;
+            }
             sendResult(player, "gshop.listing.add.success|itemID=" + itemId + "|meta=" + trueMeta + "|count=" + listing.amount + "|price=" + Money.format(listing.priceTenths));
             broadcastGlobalSnapshot();
             syncInventory(player);
@@ -593,15 +600,19 @@ public class ShopS2C
     }
 
     /**
-     * Creates an ItemStack with itemDamage=meta AND the provided NBT applied.
-     * This ensures correct behaviour for both vanilla damage-based meta items and
-     * MITE NBT-subtype items (where getItemSubtype() reads from stackTagCompound).
+     * Creates an ItemStack with the given subtype and damage, plus the provided NBT.
      */
-    private static ItemStack buildStack(Item item, int count, int meta, NBTTagCompound nbt)
+    private static ItemStack buildStack(Item item, int count, int meta, int damage, NBTTagCompound nbt)
     {
-        ItemStack stack = new ItemStack(item, count, meta);
+        ItemStack stack = new ItemStack(item, count, meta).setItemDamage(damage);
         if (nbt != null) stack.stackTagCompound = (NBTTagCompound) nbt.copy();
         return stack;
+    }
+
+    /** Convenience overload with damage=0 for items that don't use durability. */
+    private static ItemStack buildStack(Item item, int count, int meta, NBTTagCompound nbt)
+    {
+        return buildStack(item, count, meta, 0, nbt);
     }
 
     private static boolean canFit(ServerPlayer player, ItemStack stack)

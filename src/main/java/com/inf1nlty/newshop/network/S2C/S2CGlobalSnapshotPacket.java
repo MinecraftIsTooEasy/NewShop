@@ -36,6 +36,7 @@ public class S2CGlobalSnapshotPacket implements Packet {
             listingClient.listingId = buf.readInt();
             listingClient.itemId = buf.readInt();
             listingClient.meta = buf.readInt();
+            listingClient.damage = buf.readInt();
             listingClient.amount = buf.readInt();
             listingClient.priceTenths = buf.readInt();
             listingClient.owner = buf.readUTF();
@@ -68,6 +69,7 @@ public class S2CGlobalSnapshotPacket implements Packet {
             buf.writeInt(gl.listingId);
             buf.writeInt(gl.itemId);
             buf.writeInt(gl.meta);
+            buf.writeInt(gl.damage);
             buf.writeInt(gl.amount);
             buf.writeInt(gl.priceTenths);
             buf.writeUTF(gl.owner);

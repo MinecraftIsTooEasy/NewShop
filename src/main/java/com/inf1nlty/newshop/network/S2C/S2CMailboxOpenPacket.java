@@ -29,9 +29,9 @@ public class S2CMailboxOpenPacket implements Packet {
                 int size = buf.readByte();
                 int dmg = buf.readShort();
                 boolean hasNbt = buf.readBoolean();
-                ItemStack stack = new ItemStack(Item.itemsList[id], size, dmg);
+                ItemStack stack = new ItemStack(Item.itemsList[id], size, 0).setItemDamage(dmg);
                 if (hasNbt) {
-                    int nbtLen = buf.readShort();
+                    int nbtLen = buf.readUnsignedShort();
                     byte[] nbt = new byte[nbtLen];
                     buf.readFully(nbt);
                     try {
@@ -61,7 +61,7 @@ public class S2CMailboxOpenPacket implements Packet {
             } else {
                 buf.writeShort((short) stack.itemID);
                 buf.writeByte(stack.stackSize);
-                buf.writeShort((short) stack.getItemSubtype());
+                buf.writeShort((short) stack.getItemDamage());
                 buf.writeBoolean(stack.stackTagCompound != null);
                 if (stack.stackTagCompound != null) {
                     byte[] nbt = compressNBT(stack.stackTagCompound);

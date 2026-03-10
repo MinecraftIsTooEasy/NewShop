@@ -15,7 +15,8 @@ import java.util.Base64;
 
 /**
  * Global shop persistence. One line per listing:
- *   id;ownerUUID;ownerName;itemId;meta;amount;priceTenths;base64NBT;type  (S=sell, B=buy)
+ *   id;ownerUUID;ownerName;itemId;meta;damage;amount;priceTenths;base64NBT;type  (S=sell, B=buy)
+ * Legacy format (no damage field, 9 parts) is auto-imported with damage=0.
  */
 public final class GlobalShopData {
 
@@ -70,14 +71,29 @@ public final class GlobalShopData {
                     listing.ownerName  = parts[2];
                     listing.itemId     = Integer.parseInt(parts[3]);
                     listing.meta       = Integer.parseInt(parts[4]);
-                    listing.amount     = Integer.parseInt(parts[5]);
-                    listing.priceTenths = Integer.parseInt(parts[6]);
-                    String base64 = parts[7];
-                    if (!base64.isEmpty()) {
-                        byte[] data = Base64.getDecoder().decode(base64);
+                    int damageField, amountField, priceField;
+                    String base64Field, typeField;
+                    if (parts.length >= 10) {
+                        damageField = Integer.parseInt(parts[5]);
+                        amountField = Integer.parseInt(parts[6]);
+                        priceField  = Integer.parseInt(parts[7]);
+                        base64Field = parts[8];
+                        typeField   = parts[9];
+                    } else {
+                        damageField = 0;
+                        amountField = Integer.parseInt(parts[5]);
+                        priceField  = Integer.parseInt(parts[6]);
+                        base64Field = parts[7];
+                        typeField   = parts[8];
+                    }
+                    listing.damage      = damageField;
+                    listing.amount      = amountField;
+                    listing.priceTenths = priceField;
+                    if (!base64Field.isEmpty()) {
+                        byte[] data = Base64.getDecoder().decode(base64Field);
                         listing.nbt = CompressedStreamTools.readCompressed(new ByteArrayInputStream(data));
                     }
-                    listing.isBuyOrder = "B".equalsIgnoreCase(parts[8]);
+                    listing.isBuyOrder = "B".equalsIgnoreCase(typeField);
                 } catch (Exception ignored) {
                     continue;
                 }
@@ -109,7 +125,7 @@ public final class GlobalShopData {
                         } catch (Exception ignored) {}
                     }
                     writer.write(listing.listingId + ";" + listing.ownerUUID + ";" + escapeSemicolon(listing.ownerName) + ";"
-                            + listing.itemId + ";" + listing.meta + ";" + listing.amount + ";" + listing.priceTenths + ";" + base64 + ";"
+                            + listing.itemId + ";" + listing.meta + ";" + listing.damage + ";" + listing.amount + ";" + listing.priceTenths + ";" + base64 + ";"
                             + (listing.isBuyOrder ? "B" : "S") + "\n");
                 }
             }
@@ -157,6 +173,7 @@ public final class GlobalShopData {
         listing.ownerUUID   = ownerUUID;
         listing.itemId      = itemId;
         listing.meta        = meta;
+        listing.damage      = (source != null) ? source.getItemDamage() : 0;
         listing.amount      = amount;
         listing.priceTenths = priceTenths;
         if (source != null && source.stackTagCompound != null)

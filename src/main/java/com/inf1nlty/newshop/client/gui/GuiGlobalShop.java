@@ -272,7 +272,7 @@ public class GuiGlobalShop extends GuiContainer {
         GlobalListingClient lc = viewListings.get(gIdx);
         Item item = (lc.itemId >= 0 && lc.itemId < Item.itemsList.length) ? Item.itemsList[lc.itemId] : null;
         if (item == null) return;
-        ItemStack stack = new ItemStack(item, lc.amount == -1 ? 1 : lc.amount, lc.meta);
+        ItemStack stack = new ItemStack(item, lc.amount == -1 ? 1 : lc.amount, lc.meta).setItemDamage(lc.damage);
         if (lc.nbt != null) stack.stackTagCompound = (NBTTagCompound) lc.nbt.copy();
         if (stack.stackTagCompound == null) stack.stackTagCompound = new NBTTagCompound();
         stack.stackTagCompound.setInteger("GShopPriceTenths", lc.priceTenths);
@@ -357,7 +357,7 @@ public class GuiGlobalShop extends GuiContainer {
             Item item = (lc.itemId >= 0 && lc.itemId < Item.itemsList.length) ? Item.itemsList[lc.itemId] : null;
             if (item == null) continue;
             // Build render stack with stackSize=1 so the engine doesn't clamp lc.amount to maxStackSize
-            ItemStack stack = new ItemStack(item, 1, lc.meta);
+            ItemStack stack = new ItemStack(item, 1, lc.meta).setItemDamage(lc.damage);
             if (lc.nbt != null) stack.stackTagCompound = (NBTTagCompound) lc.nbt.copy();
             // Reset zLevel before each item to prevent enchantment effect leaking
             this.zLevel = 100.0F;
@@ -604,7 +604,7 @@ public class GuiGlobalShop extends GuiContainer {
     }
 
     public static class GlobalListingClient {
-        public int listingId, itemId, meta, amount, priceTenths;
+        public int listingId, itemId, meta, damage, amount, priceTenths;
         public String owner;
         public boolean isBuyOrder;
         public byte[] nbtCompressed;
