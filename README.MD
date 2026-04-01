@@ -51,7 +51,7 @@ An in‑game economy system for MITE (fml3.x) providing:
 - Shift‑click shop item → attempt full stack purchase (max stack size).
 - Shift‑click your inventory slot → sells that entire stack (if configured) or disposes if forced.
 
-Server sends the *entire catalog* (id, meta, buy, sell) when opening; client never reads local `newshop.cfg`.
+Server sends the *entire catalog* (id, meta, buy, sell) when opening; client never reads local `NewShop.cfg`.
 
 ---
 
@@ -89,7 +89,7 @@ Self‑buy rejection avoids double messaging and accidental price manipulation.
 
 | File | Purpose | Format |
 |------|---------|--------|
-| `config/newshop.cfg` | System shop price list | `id[:meta]=buy,sell` + `force_sell_unlisted=true/false` |
+| `config/NewShop.cfg` | System shop price list | `id[:meta]=buy,sell` + `force_sell_unlisted=true/false` |
 | `config/global_shop.cfg` | Player listings persistence | `id;ownerUUID;ownerName;itemId;meta;amount;priceTenths;base64NBT` |
 
 ### shop.cfg Example
@@ -172,7 +172,7 @@ System shop uses NBT values sent per catalog entry; falls back to server config 
 |------|----------------------------------------------|
 | Player balance | Player NBT tag (`shop_money`)                |
 | Global listings | `config/global_shop.cfg` lines               |
-| System prices | `config/newshop.cfg` authoritative on server |
+| System prices | `config/NewShop.cfg` authoritative on server |
 | Key binds | `options.txt` (with custom re-load)          |
 
 ---
@@ -200,7 +200,7 @@ Listing entry: `(id, itemId, meta, amount, priceTenths, ownerName, [NBT])`
 
 ## 12. Adding / Updating Prices
 
-1. Edit `config/newshop.cfg`
+1. Edit `config/NewShop.cfg`
 2. Run `/shop reload`
 3. Players reopening the/system shop will receive updated catalog.
 

@@ -15,7 +15,7 @@ public abstract class ItemShopMixin implements ShopItem {
     public double newShop$getSoldPrice(int subtype) {
         Item self = (Item) (Object) this;
         ShopListing listing = GoodsConfig.get(self.itemID, subtype);
-        return listing != null ? listing.sellPriceTenths / 10.0 : 0.0;
+        return listing != null ? listing.sellPriceTenths / 100.0 : 0.0;
     }
 
     @Unique
@@ -23,7 +23,7 @@ public abstract class ItemShopMixin implements ShopItem {
     public double newShop$getBuyPrice(int subtype) {
         Item self = (Item) (Object) this;
         ShopListing listing = GoodsConfig.get(self.itemID, subtype);
-        return listing != null ? listing.buyPriceTenths / 10.0 : 0.0;
+        return listing != null ? listing.buyPriceTenths / 100.0 : 0.0;
     }
 
     @Unique
@@ -32,7 +32,7 @@ public abstract class ItemShopMixin implements ShopItem {
         Item self = (Item) (Object) this;
         ShopListing existing = GoodsConfig.get(self.itemID, subtype);
         int buyTenths = existing != null ? existing.buyPriceTenths : 0;
-        GoodsConfig.savePrice(self.itemID, subtype, buyTenths, (int) Math.round(soldPrice * 10.0));
+        GoodsConfig.savePrice(self.itemID, subtype, buyTenths, (int) Math.round(soldPrice * 100.0));
     }
 
     @Unique
@@ -41,7 +41,7 @@ public abstract class ItemShopMixin implements ShopItem {
         Item self = (Item) (Object) this;
         ShopListing existing = GoodsConfig.get(self.itemID, subtype);
         int sellTenths = existing != null ? existing.sellPriceTenths : 0;
-        GoodsConfig.savePrice(self.itemID, subtype, (int) Math.round(buyPrice * 10.0), sellTenths);
+        GoodsConfig.savePrice(self.itemID, subtype, (int) Math.round(buyPrice * 100.0), sellTenths);
     }
 
     @Unique

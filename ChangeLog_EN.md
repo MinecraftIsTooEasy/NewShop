@@ -1,5 +1,11 @@
 # 【New Shop】
 
+# v1.0.5
+
+* Fixed the issue where selling through the Extremely Difficult Jewelry slot would fetch ten times the price.
+* Optimized item enumeration.
+* Renamed the item configuration file to NewShop.cfg
+
 # v1.0.4
 
 * Fixed the issue of equipment durability display synchronization when opening the shop interface.

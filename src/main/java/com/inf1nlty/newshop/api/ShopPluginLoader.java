@@ -27,7 +27,7 @@ public final class ShopPluginLoader {
     }
 
     /**
-     * Invoked by {@link GoodsConfig} after loading newshop.cfg.
+     * Invoked by {@link GoodsConfig} after loading NewShop.cfg.
      * Plugin entries fill in items not already defined by the cfg file; cfg-file entries always win.
      */
     public static synchronized void applyAll(List<ShopListing> itemList, Map<Integer, ShopListing> itemMap)

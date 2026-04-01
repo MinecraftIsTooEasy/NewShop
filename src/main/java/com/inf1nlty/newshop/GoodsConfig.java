@@ -12,14 +12,15 @@ import java.util.*;
 import java.util.Base64;
 
 /**
- * Loads system shop items from config/newshop.cfg.
+ * Loads system shop items from config/NewShop.cfg.
  *
  * <p>Config line format:
  * <pre>
  *   modid:name[:meta][|base64nbt] = buyPrice,sellPrice
  * </pre>
- * Vanilla items use {@code minecraft} as the modid (e.g. {@code minecraft:swordIron=10.00,5.00}).
- * Mod items use their own modid (e.g. {@code mymod:myItem=5.00,2.50}).
+ * Vanilla items use {@code minecraft} as the modid and keep {@code item./tile.} kind
+ * (e.g. {@code minecraft:item.swordIron=10.00,5.00}, {@code minecraft:tile.stone=10.00,5.00}).
+ * Mod items use their own modid (e.g. {@code mymod:item.myItem=5.00,2.50}).
  * The legacy numeric-ID format ({@code 256=10.00,5.00}) is still accepted for backward compatibility.
  * Prices support up to two decimal places.  A price of {@code 0,0} means the entry is disabled.
  * Items without gameplay NBT use the fast {@code int} composite key.
@@ -34,6 +35,8 @@ public class GoodsConfig {
     private static List<ShopListing>         itemList   = new ArrayList<>();
     private static long lastLoadTime = 0L;
     private static final long RELOAD_MS = 3000;
+    private static final String CONFIG_DIR = "config";
+    private static final String CONFIG_FILE_NAME = "NewShop.cfg";
 
     private GoodsConfig() {}
 
@@ -65,20 +68,32 @@ public class GoodsConfig {
     }
 
     public static synchronized void reload() {
-        loadInternal(new File("config/newshop.cfg"));
+        loadInternal(resolveConfigForLoad());
     }
 
     private static void ensure() {
         if (System.currentTimeMillis() - lastLoadTime < RELOAD_MS && !itemMap.isEmpty()) return;
-        loadInternal(new File("config/newshop.cfg"));
+        loadInternal(resolveConfigForLoad());
     }
 
     public static synchronized void regenerateDefault() {
-        File file = new File("config/newshop.cfg");
+        File file = resolveConfigForWrite();
         if (file.exists()) file.delete();
         generateDefault(file);
         loadInternal(file);
         lastLoadTime = 0L;
+    }
+
+    private static File primaryConfigFile() {
+        return new File(CONFIG_DIR, CONFIG_FILE_NAME);
+    }
+
+    private static File resolveConfigForLoad() {
+        return primaryConfigFile();
+    }
+
+    private static File resolveConfigForWrite() {
+        return primaryConfigFile();
     }
 
     private static void loadInternal(File file) {
@@ -185,6 +200,23 @@ public class GoodsConfig {
 
     private static class IdMeta { int id = -1; int meta = 0; }
 
+    private static class BareIdentifier {
+        String modid = "minecraft";
+        String name = "";
+    }
+
+    private static class NameSpec {
+        String kind;
+        String name = "";
+    }
+
+    private static class UnlocalizedInfo {
+        String kind;
+        String modid = "minecraft";
+        String name = "";
+        String body = "";
+    }
+
     private static IdMeta parseIdentifier(String raw) {
         IdMeta result = new IdMeta();
         if (raw.matches("^\\d+(?::\\d+)?$")) {
@@ -193,14 +225,38 @@ public class GoodsConfig {
             if (segments.length == 2) result.meta = parseIntSafe(segments[1]);
             return result;
         }
-        String[] segments = raw.split(":");
-        if (segments.length >= 2) {
-            String modid = segments[0];
-            String name  = segments[1];
-            int    meta  = (segments.length == 3 && segments[2].matches("\\d+")) ? parseIntSafe(segments[2]) : 0;
-            int    found = findItemId(modid, name);
-            if (found >= 0) { result.id = found; result.meta = meta; }
+
+        String ident = raw.trim();
+        int meta = 0;
+
+        // Optional trailing ":meta", while allowing dots in the name body.
+        int lastColon = ident.lastIndexOf(':');
+        if (lastColon > 0) {
+            String maybeMeta = ident.substring(lastColon + 1).trim();
+            if (maybeMeta.matches("\\d+")) {
+                meta = parseIntSafe(maybeMeta);
+                ident = ident.substring(0, lastColon).trim();
+            }
         }
+
+        String modid;
+        String name;
+        int firstColon = ident.indexOf(':');
+        if (firstColon > 0) {
+            modid = ident.substring(0, firstColon).trim();
+            name  = ident.substring(firstColon + 1).trim();
+        } else {
+            BareIdentifier bare = parseBareIdentifier(ident);
+            modid = bare.modid;
+            name = bare.name;
+        }
+
+        int found = findItemId(modid, name);
+        if (found >= 0) {
+            result.id = found;
+            result.meta = meta;
+        }
+
         return result;
     }
 
@@ -209,23 +265,103 @@ public class GoodsConfig {
         try { return Integer.parseInt(str); } catch (NumberFormatException ignored) { return 0; }
     }
 
+    private static BareIdentifier parseBareIdentifier(String raw) {
+        BareIdentifier parsed = new BareIdentifier();
+        String normalized = stripNameSuffix(raw);
+
+        if (normalized.startsWith("item.") || normalized.startsWith("tile.")) {
+            String kind = normalized.startsWith("item.") ? "item" : "tile";
+            // Prefer vanilla interpretation first (important for names like "tile.wood.oak").
+            parsed.modid = "minecraft";
+            parsed.name = normalized;
+            if (findItemId(parsed.modid, parsed.name) >= 0) {
+                return parsed;
+            }
+
+            // Fallback: modded bare key style "item.modid.name" / "tile.modid.name".
+            String body = normalized.substring(5);
+            int dot = body.indexOf('.');
+            if (dot > 0) {
+                String guessedModid = body.substring(0, dot);
+                String guessedName = kind + "." + body.substring(dot + 1);
+                if (findItemId(guessedModid, guessedName) >= 0) {
+                    parsed.modid = guessedModid;
+                    parsed.name = guessedName;
+                }
+            }
+            return parsed;
+        }
+
+        parsed.modid = "minecraft";
+        parsed.name = normalized;
+        return parsed;
+    }
+
+    private static String stripNameSuffix(String key) {
+        if (key == null) return "";
+        String trimmed = key.trim();
+        return trimmed.endsWith(".name") ? trimmed.substring(0, trimmed.length() - 5) : trimmed;
+    }
+
+    private static NameSpec parseNameSpec(String rawName) {
+        NameSpec spec = new NameSpec();
+        String normalized = stripNameSuffix(rawName);
+        if (normalized.startsWith("item.")) {
+            spec.kind = "item";
+            normalized = normalized.substring(5);
+        } else if (normalized.startsWith("tile.")) {
+            spec.kind = "tile";
+            normalized = normalized.substring(5);
+        }
+        spec.name = normalized;
+        return spec;
+    }
+
+    private static UnlocalizedInfo parseUnlocalized(String unlocalized) {
+        if (unlocalized == null || unlocalized.isEmpty()) return null;
+
+        String normalized = stripNameSuffix(unlocalized);
+        UnlocalizedInfo info = new UnlocalizedInfo();
+        if (normalized.startsWith("item.")) {
+            info.kind = "item";
+            info.body = normalized.substring(5);
+        } else if (normalized.startsWith("tile.")) {
+            info.kind = "tile";
+            info.body = normalized.substring(5);
+        } else {
+            info.body = normalized;
+        }
+
+        int dot = info.body.indexOf('.');
+        if (dot > 0) {
+            info.modid = info.body.substring(0, dot);
+            info.name = info.body.substring(dot + 1);
+        } else {
+            info.modid = "minecraft";
+            info.name = info.body;
+        }
+        return info;
+    }
+
+    private static boolean matchesUnlocalized(String modid, NameSpec requested, String unlocalized) {
+        UnlocalizedInfo info = parseUnlocalized(unlocalized);
+        if (info == null) return false;
+        if (!info.modid.equals(modid)) return false;
+        if (requested.kind != null && !requested.kind.equals(info.kind)) return false;
+        if (requested.name == null || requested.name.isEmpty()) return false;
+        return requested.name.equals(info.name) || requested.name.equals(info.body);
+    }
+
     private static int findItemId(String modid, String name) {
-        String searchUnlocalized = modid + "." + name;
+        NameSpec requested = parseNameSpec(name);
+
         for (Item item : Item.itemsList) {
             if (item == null) continue;
-            String unlocalized = item.getUnlocalizedName();
-            if (unlocalized == null) continue;
-            String trimmed = unlocalized.replace("item.", "").replace("tile.", "");
-            if (trimmed.equals(searchUnlocalized)) return item.itemID;
-            if (modid.equals("minecraft") && trimmed.equals(name)) return item.itemID;
+            if (matchesUnlocalized(modid, requested, item.getUnlocalizedName())) return item.itemID;
         }
         for (Block block : Block.blocksList) {
             if (block == null) continue;
-            String unlocalized = block.getUnlocalizedName();
-            if (unlocalized == null) continue;
-            String trimmed = unlocalized.replace("item.", "").replace("tile.", "");
-            if (trimmed.equals(searchUnlocalized)) return block.blockID;
-            if (modid.equals("minecraft") && trimmed.equals(name)) return block.blockID;
+            if (matchesUnlocalized(modid, requested, block.getUnlocalizedName())) return block.blockID;
         }
         return -1;
     }
@@ -240,8 +376,8 @@ public class GoodsConfig {
                 writer.write("# System Shop Config\n");
                 writer.write("# 格式: modid:name[:meta][|base64nbt]=buyPrice,sellPrice  (价格支持两位小数)\n");
                 writer.write("# Format: modid:name[:meta][|base64nbt]=buyPrice,sellPrice  (price supports two decimal places)\n");
-                writer.write("# 原版物品 modid 为 minecraft，例如: minecraft:swordIron=10.00,5.00\n");
-                writer.write("# Vanilla items use modid 'minecraft', e.g.: minecraft:swordIron=10.00,5.00\n");
+                writer.write("# 原版物品 modid 为 minecraft，例如: minecraft:item.swordIron=10.00,5.00\n");
+                writer.write("# Vanilla examples: minecraft:item.swordIron=10.00,5.00 and minecraft:tile.stone=10.00,5.00\n");
                 writer.write("# 价格 0,0 表示不启用，修改价格即可启用 / price 0,0 = disabled; change price to enable\n");
                 writer.write("# 向后兼容: 支持纯数字 ID 格式 (e.g. 256=10.00,5.00)\n");
                 writer.write("# Backward compat: legacy numeric-ID format still works (e.g. 256=10.00,5.00)\n\n");
@@ -287,7 +423,8 @@ public class GoodsConfig {
     }
 
     /**
-     * Derives a stable {@code modid:name} key from an Item's unlocalized name.
+     * Derives a stable key from an Item's unlocalized name.
+     * Output keeps kind information as {@code modid:item.name} or {@code modid:tile.name}.
      * <ul>
      *   <li>Vanilla items (unlocalized = {@code item.swordIron}) → {@code minecraft:swordIron}</li>
      *   <li>Mod items    (unlocalized = {@code item.modid.itemName}) → {@code modid:itemName}</li>
@@ -295,21 +432,28 @@ public class GoodsConfig {
      * Falls back to the numeric ID if the unlocalized name is absent.
      */
     static String itemToNamespaceKey(Item item) {
-        String unlocalized = item.getUnlocalizedName();
+        String unlocalized = stripNameSuffix(item.getUnlocalizedName());
         if (unlocalized == null || unlocalized.isEmpty()) return String.valueOf(item.itemID);
 
         // Strip leading "item." / "tile." prefix that MITE always adds
+        String kind = "item";
         String trimmed = unlocalized;
-        if (trimmed.startsWith("item."))  trimmed = trimmed.substring(5);
-        else if (trimmed.startsWith("tile.")) trimmed = trimmed.substring(5);
+        if (trimmed.startsWith("item.")) {
+            kind = "item";
+            trimmed = trimmed.substring(5);
+        }
+        else if (trimmed.startsWith("tile.")) {
+            kind = "tile";
+            trimmed = trimmed.substring(5);
+        }
 
         // If there is still a dot, the part before it is the modid
         int dot = trimmed.indexOf('.');
         if (dot > 0) {
-            return trimmed.substring(0, dot) + ":" + trimmed.substring(dot + 1);
+            return trimmed.substring(0, dot) + ":" + kind + "." + trimmed.substring(dot + 1);
         }
         // No dot → vanilla item
-        return "minecraft:" + trimmed;
+        return "minecraft:" + kind + "." + trimmed;
     }
 
     public static int compositeKey(int id, int dmg) {
@@ -325,14 +469,14 @@ public class GoodsConfig {
         } catch (Exception e) { return id + ":" + meta + ":?"; }
     }
 
-    /** Sets or updates the buy/sell price for an item (with optional gameplay NBT) in newshop.cfg and in-memory state. */
+    /** Sets or updates the buy/sell price for an item (with optional gameplay NBT) in NewShop.cfg and in-memory state. */
     public static synchronized void savePrice(int itemID, int meta, int buyTenths, int sellTenths, NBTTagCompound nbt) {
-        File file = new File("config/newshop.cfg");
+        File file = resolveConfigForWrite();
         if (!file.exists()) generateDefault(file);
 
         Item base = Item.itemsList[itemID];
 
-        // Build the namespace key (e.g. "minecraft:swordIron") for writing;
+        // Build the namespace key (e.g. "minecraft:item.swordIron") for writing;
         // keep the legacy numeric key around so we can upgrade old lines in-place.
         String nsBase    = (base != null) ? itemToNamespaceKey(base) : String.valueOf(itemID);
         String numBase   = (meta == 0 ? String.valueOf(itemID) : (itemID + ":" + meta));
