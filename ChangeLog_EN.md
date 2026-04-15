@@ -1,5 +1,8 @@
 # 【New Shop】
 
+# v1.0.6
+* Fixed a series of issues.
+
 # v1.0.5
 
 * Fixed the issue where selling through the Extremely Difficult Jewelry slot would fetch ten times the price.

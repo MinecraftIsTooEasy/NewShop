@@ -115,7 +115,7 @@ public class GuiCreateListing extends GuiScreen {
                 // Buy order: no item deduction; server identifies it by a negative priceTenths value
                 ShopC2S.sendGlobalList(editStack.itemID, editStack.getItemSubtype(), amount, -priceTenths);
             } else if (fromContainer) {
-                ShopC2S.sendGlobalListFromContainerSlot(editStack.itemID, editStack.getItemDamage(), amount, this.slotIndex, priceTenths, this.windowId, creative);
+                ShopC2S.sendGlobalListFromContainerSlot(editStack.itemID, editStack.getItemSubtype(), amount, this.slotIndex, priceTenths, this.windowId, creative);
             } else {
                 // For creative/template listings (slotIndex == -1), compress the item's full NBT
                 byte[] nbtData = null;
@@ -126,7 +126,7 @@ public class GuiCreateListing extends GuiScreen {
                         nbtData = bos.toByteArray();
                     } catch (Exception ignored) {}
                 }
-                ShopC2S.sendGlobalListFromSlot(editStack.itemID, editStack.getItemDamage(), amount, this.slotIndex, priceTenths, creative, nbtData);
+                ShopC2S.sendGlobalListFromSlot(editStack.itemID, editStack.getItemSubtype(), amount, this.slotIndex, priceTenths, creative, nbtData);
             }
             mc.displayGuiScreen(parentScreen);
         }

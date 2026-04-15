@@ -31,10 +31,11 @@ public class S2CInventorySyncPacket implements Packet {
             else
             {
                 int size = buf.readByte();
+                int subtype = buf.readShort();
                 int dmg = buf.readShort();
 
                 Item item = id < Item.itemsList.length ? Item.itemsList[id] : null;
-                ItemStack stack = item != null ? new ItemStack(item, size, 0).setItemDamage(dmg) : null;
+                ItemStack stack = item != null ? new ItemStack(item, size, subtype).setItemDamage(dmg) : null;
 
                 boolean hasNbt = buf.readBoolean();
 
@@ -74,6 +75,7 @@ public class S2CInventorySyncPacket implements Packet {
             {
                 buf.writeShort((short) st.itemID);
                 buf.writeByte(st.stackSize);
+                buf.writeShort((short) st.getItemSubtype());
                 buf.writeShort((short) st.getItemDamage());
                 buf.writeBoolean(st.stackTagCompound != null);
 

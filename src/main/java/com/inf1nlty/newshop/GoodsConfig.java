@@ -2,10 +2,13 @@ package com.inf1nlty.newshop;
 
 import com.inf1nlty.newshop.api.ShopPluginLoader;
 import net.minecraft.Block;
+import net.minecraft.BlockDoor;
 import net.minecraft.CompressedStreamTools;
 import net.minecraft.Item;
 import net.minecraft.ItemStack;
 import net.minecraft.NBTTagCompound;
+import net.xiaoyu233.fml.api.block.IBlock;
+import net.xiaoyu233.fml.api.item.IItem;
 
 import java.io.*;
 import java.util.*;
@@ -182,8 +185,6 @@ public class GoodsConfig {
         lastLoadTime = System.currentTimeMillis();
     }
 
-    // ...existing code...
-
     private static Integer parsePriceTenths(String raw) {
         raw = raw.trim();
         if (!raw.matches("-?\\d+(\\.\\d{1,2})?")) return null;
@@ -208,13 +209,6 @@ public class GoodsConfig {
     private static class NameSpec {
         String kind;
         String name = "";
-    }
-
-    private static class UnlocalizedInfo {
-        String kind;
-        String modid = "minecraft";
-        String name = "";
-        String body = "";
     }
 
     private static IdMeta parseIdentifier(String raw) {
@@ -317,39 +311,23 @@ public class GoodsConfig {
         return spec;
     }
 
-    private static UnlocalizedInfo parseUnlocalized(String unlocalized) {
-        if (unlocalized == null || unlocalized.isEmpty()) return null;
-
-        String normalized = stripNameSuffix(unlocalized);
-        UnlocalizedInfo info = new UnlocalizedInfo();
-        if (normalized.startsWith("item.")) {
-            info.kind = "item";
-            info.body = normalized.substring(5);
-        } else if (normalized.startsWith("tile.")) {
-            info.kind = "tile";
-            info.body = normalized.substring(5);
-        } else {
-            info.body = normalized;
-        }
-
-        int dot = info.body.indexOf('.');
-        if (dot > 0) {
-            info.modid = info.body.substring(0, dot);
-            info.name = info.body.substring(dot + 1);
-        } else {
-            info.modid = "minecraft";
-            info.name = info.body;
-        }
-        return info;
+    /** Resolves a normalized modid ("minecraft" for vanilla/unset) for either a Block or an Item. */
+    private static String resolveModid(Block block, Item item) {
+        String ns = null;
+        if (block != null && ((IBlock) block).hasNamespaceSet()) ns = ((IBlock) block).getNamespace();
+        if (ns == null && item != null && ((IItem) item).hasNamespaceSet()) ns = ((IItem) item).getNamespace();
+        return (ns == null || ns.isEmpty() || "Minecraft".equalsIgnoreCase(ns)) ? "minecraft" : ns;
     }
 
-    private static boolean matchesUnlocalized(String modid, NameSpec requested, String unlocalized) {
-        UnlocalizedInfo info = parseUnlocalized(unlocalized);
-        if (info == null) return false;
-        if (!info.modid.equals(modid)) return false;
-        if (requested.kind != null && !requested.kind.equals(info.kind)) return false;
+    private static boolean matchesNameSpec(NameSpec requested, String unlocalized) {
+        if (unlocalized == null || unlocalized.isEmpty()) return false;
+        String body = stripNameSuffix(unlocalized);
+        String kind = null;
+        if (body.startsWith("item.")) { kind = "item"; body = body.substring(5); }
+        else if (body.startsWith("tile.")) { kind = "tile"; body = body.substring(5); }
+        if (requested.kind != null && !requested.kind.equals(kind)) return false;
         if (requested.name == null || requested.name.isEmpty()) return false;
-        return requested.name.equals(info.name) || requested.name.equals(info.body);
+        return requested.name.equals(body);
     }
 
     private static int findItemId(String modid, String name) {
@@ -357,11 +335,14 @@ public class GoodsConfig {
 
         for (Item item : Item.itemsList) {
             if (item == null) continue;
-            if (matchesUnlocalized(modid, requested, item.getUnlocalizedName())) return item.itemID;
+            Block owningBlock = (item.itemID >= 0 && item.itemID < Block.blocksList.length) ? Block.blocksList[item.itemID] : null;
+            if (!modid.equals(resolveModid(owningBlock, item))) continue;
+            if (matchesNameSpec(requested, item.getUnlocalizedName())) return item.itemID;
         }
         for (Block block : Block.blocksList) {
             if (block == null) continue;
-            if (matchesUnlocalized(modid, requested, block.getUnlocalizedName())) return block.blockID;
+            if (!modid.equals(resolveModid(block, null))) continue;
+            if (matchesNameSpec(requested, block.getUnlocalizedName())) return block.blockID;
         }
         return -1;
     }
@@ -393,6 +374,7 @@ public class GoodsConfig {
 
         for (Item item : Item.itemsList) {
             if (item == null) continue;
+            if (item.itemID < Block.blocksList.length && Block.blocksList[item.itemID] instanceof BlockDoor) continue;
 
             List<ItemStack> subs;
             try { subs = item.getSubItems(); } catch (Exception ignored) { subs = null; }
@@ -435,7 +417,11 @@ public class GoodsConfig {
         String unlocalized = stripNameSuffix(item.getUnlocalizedName());
         if (unlocalized == null || unlocalized.isEmpty()) return String.valueOf(item.itemID);
 
-        // Strip leading "item." / "tile." prefix that MITE always adds
+        // For ItemBlock wrappers the mod typically only calls setNamespace on the Block side,
+        // so look up the owning block when the ID falls in the block range.
+        Block owningBlock = (item.itemID >= 0 && item.itemID < Block.blocksList.length) ? Block.blocksList[item.itemID] : null;
+        String modid = resolveModid(owningBlock, item);
+
         String kind = "item";
         String trimmed = unlocalized;
         if (trimmed.startsWith("item.")) {
@@ -447,13 +433,7 @@ public class GoodsConfig {
             trimmed = trimmed.substring(5);
         }
 
-        // If there is still a dot, the part before it is the modid
-        int dot = trimmed.indexOf('.');
-        if (dot > 0) {
-            return trimmed.substring(0, dot) + ":" + kind + "." + trimmed.substring(dot + 1);
-        }
-        // No dot → vanilla item
-        return "minecraft:" + kind + "." + trimmed;
+        return modid + ":" + kind + "." + trimmed;
     }
 
     public static int compositeKey(int id, int dmg) {
